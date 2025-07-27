@@ -379,22 +379,18 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
 
 
 # === Kodlar ro‘yxati
-@dp.message_handler(lambda m: m.text == "📄 Kodlar ro‘yxati")
+@dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
 async def kodlar(message: types.Message):
     kodlar = await get_all_codes()
     if not kodlar:
-        await message.answer("📂 Kodlar yo‘q.")
+        await message.answer("⛔️ Hech qanday kod topilmadi.")
         return
 
-    text = "📄 Kodlar:\n"
+    text = "📄 *Kodlar ro‘yxati:*\n\n"
     for row in kodlar:
+        title = row["title"]  # ✅ to‘g‘ri ishlaydi
         code = row["code"]
-        ch = row["channel"]
-        msg_id = row["message_id"]
-        count = row["post_count"]
-        title = row.get("title") or "Nomsiz"
-
-        text += f"🎬 *{title}*\n🔹 {code} → {ch} | {msg_id} ({count} post)\n\n"
+        text += f"*{title}* - `{code}`\n"
 
     await message.answer(text, parse_mode="Markdown")
 
