@@ -12,7 +12,6 @@ from aiogram.types import (
 from aiogram.utils import executor
 
 # Ichki modullar
-from loader import bot, dp, storage  # loader.py ichida yaratilgan bot, dp, storage
 from keep_alive import keep_alive  # agar siz Render yoki Replitda ishlatsangiz
 
 # Database funksiyalari
