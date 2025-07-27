@@ -55,7 +55,7 @@ async def make_subscribe_markup(code):
     keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return keyboard
 
-ADMINS = [6486825926, 7483732504, 5959511392]
+ADMINS = [6486825926]
 
 # === HOLATLAR ===
 class AdminStates(StatesGroup):
@@ -106,7 +106,7 @@ async def start_handler(message: types.Message):
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
         kb.add("📊 Statistika", "📈 Kod statistikasi")
-        kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
+        kb.add("📢 Habar yuborish", "❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
         kb.add("✏️ Kodni tahrirlash")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
@@ -217,6 +217,47 @@ async def handle_code_message(message: types.Message):
         await increment_stat(code, "searched")
         await send_reklama_post(message.from_user.id, code)
         await increment_stat(code, "viewed")
+
+# === 📢 Habar yuborish
+@dp.message_handler(lambda m: m.text == "📢 Habar yuborish")
+async def ask_broadcast_info(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    await AdminStates.waiting_for_broadcast_data.set()
+    await message.answer("📨 Habar yuborish uchun format:\n`@kanal xabar_id`", parse_mode="Markdown")
+
+@dp.message_handler(state=AdminStates.waiting_for_broadcast_data)
+async def send_forward_only(message: types.Message, state: FSMContext):
+    await state.finish()
+    parts = message.text.strip().split()
+    if len(parts) != 2:
+        await message.answer("❗ Format noto‘g‘ri. Masalan: `@kanalim 123`")
+        return
+
+    channel_username, msg_id = parts
+    if not msg_id.isdigit():
+        await message.answer("❗ Xabar ID raqam bo‘lishi kerak.")
+        return
+
+    msg_id = int(msg_id)
+    users = await get_all_user_ids()  # Foydalanuvchilar ro‘yxati
+
+    success = 0
+    fail = 0
+
+    for user_id in users:
+        try:
+            await bot.forward_message(
+                chat_id=user_id,
+                from_chat_id=channel_username,
+                message_id=msg_id
+            )
+            success += 1
+        except Exception as e:
+            print(f"Xatolik {user_id} uchun: {e}")
+            fail += 1
+
+    await message.answer(f"✅ Yuborildi: {success} ta\n❌ Xatolik: {fail} ta")
 
 # === Obuna tekshirish callback
 @dp.callback_query_handler(lambda c: c.data.startswith("check_sub:"))
