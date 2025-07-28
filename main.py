@@ -106,7 +106,7 @@ async def start_handler(message: types.Message):
         kb.add("➕ Anime qo‘shish")
         kb.add("📊 Statistika", "📈 Kod statistikasi")
         kb.add("📢 Habar yuborish", "❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
-        kb.add("✏️ Kodni tahrirlash")
+        kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
