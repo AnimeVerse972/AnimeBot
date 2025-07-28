@@ -96,8 +96,8 @@ async def get_kino_by_code(code):
 # === Barcha kodlarni olish ===
 async def get_all_codes():
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM kino_codes")
-        return rows
+        rows = await conn.fetch("SELECT code, title FROM kino_codes")
+        return [{"code": row["code"], "title": row["title"]} for row in rows]
 
 # === Kodni o‘chirish ===
 async def delete_kino_code(code):
@@ -139,8 +139,3 @@ async def get_all_user_ids():
         rows = await conn.fetch("SELECT user_id FROM users")
         return [row["user_id"] for row in rows]
         
-# === Barcha foydalanuvchi IDlarini olish ===
-async def get_all_user_ids():
-    async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT user_id FROM users")
-        return [row["user_id"] for row in rows]
