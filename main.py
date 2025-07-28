@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -10,11 +9,7 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton
 )
 from aiogram.utils import executor
-
-# Ichki modullar
-from keep_alive import keep_alive  # agar siz Render yoki Replitda ishlatsangiz
-
-# Database funksiyalari
+from keep_alive import keep_alive
 from database import (
     init_db,
     add_user,
@@ -36,7 +31,7 @@ keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = os.getenv("CHANNEL_USERNAMES").split(",")
-MAIN_CHANNEL = os.getenv("MAIN_CHANNEL")
+MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
 bot = Bot(token=API_TOKEN)
@@ -364,12 +359,13 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         )
 
         try:
-            await bot.copy_message(
-                chat_id=MAIN_CHANNEL,
-                from_chat_id=server_channel,
-                message_id=reklama_id,
+            for ch in MAIN_CHANNELS:
+                await bot.copy_message(
+                    chat_id=ch,
+                    from_chat_id=server_channel,
+                        message_id=reklama_id,
                 reply_markup=download_btn
-            )
+        ) 
             successful += 1
         except:
             failed += 1
@@ -394,31 +390,6 @@ async def kodlar(message: types.Message):
 
     await message.answer(text, parse_mode="Markdown")
 
-
-@dp.message_handler(lambda m: m.text == "🔍 Anime qidirish")
-async def search_start(message: types.Message):
-    await SearchStates.waiting_for_anime_name.set()
-    await message.answer("🔎 Qidirayotgan anime nomini yuboring.\n\n❌ Bekor qilish uchun '❌ Bekor qilish' deb yozing.")
-
-@dp.message_handler(state=SearchStates.waiting_for_anime_name)
-async def perform_search(message: types.Message, state: FSMContext):
-    if message.text.lower() in ["❌", "❌ bekor qilish"]:
-        await state.finish()
-        await message.answer("❌ Qidiruv bekor qilindi.")
-        return
-
-    query = message.text.strip().lower()
-    results = await search.anime_search(query)  # search.py faylidan funksiya
-
-    if not results:
-        await message.answer("❗ Hech narsa topilmadi.")
-    else:
-        msg = "🔍 Qidiruv natijalari:\n\n"
-        for r in results:
-            msg += f"🎬 <b>{r['title']}</b>\n🔗 <code>{r['code']}</code>\n\n"
-        await message.answer(msg, parse_mode="HTML")
-
-    await state.finish()
     
 # === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
@@ -426,6 +397,47 @@ async def stats(message: types.Message):
     kodlar = await get_all_codes()
     foydalanuvchilar = await get_user_count()
     await message.answer(f"📦 Kodlar: {len(kodlar)}\n👥 Foydalanuvchilar: {foydalanuvchilar}")
+
+@dp.message_handler(lambda m: m.text == "📤 Post qilish")
+async def start_post_process(message: types.Message):
+    if message.from_user.id in ADMINS:
+        await PostStates.waiting_for_image.set()
+        await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
+async def get_post_image(message: types.Message, state: FSMContext):
+    photo = message.photo[-1].file_id
+    await state.update_data(photo=photo)
+    await PostStates.waiting_for_title.set()
+    await message.answer("📌 Endi rasm ostiga yoziladigan nomni yuboring.")
+@dp.message_handler(state=PostStates.waiting_for_title)
+async def get_post_title(message: types.Message, state: FSMContext):
+    await state.update_data(title=message.text.strip())
+    await PostStates.waiting_for_link.set()
+    await message.answer("🔗 Yuklab olish uchun havolani yuboring.")
+@dp.message_handler(state=PostStates.waiting_for_link)
+async def get_post_link(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    photo = data.get("photo")
+    title = data.get("title")
+    link = message.text.strip()
+
+    button = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("📥 Yuklab olish", url=link)
+    )
+
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo=photo,
+            caption=title,
+            reply_markup=button
+        )
+        await message.answer("✅ Post muvaffaqiyatli yuborildi.")
+    except Exception as e:
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
+    finally:
+        await state.finish()
+
 
 # === ❌ Kodni o‘chirish
 @dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish")
