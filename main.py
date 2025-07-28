@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-
+from urllib.parse import urlparse
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -74,6 +74,11 @@ class UserStates(StatesGroup):
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
 
+class PostStates(StatesGroup):
+    waiting_for_image = State()
+    waiting_for_title = State()
+    waiting_for_link = State()
+
 # === OBUNA TEKSHIRISH ===
 async def is_user_subscribed(user_id):
     for channel in CHANNELS:
@@ -105,8 +110,8 @@ async def start_handler(message: types.Message):
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
         kb.add("📊 Statistika", "📈 Kod statistikasi")
-        kb.add("📢 Habar yuborish", "❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
-        kb.add("✏️ Kodni tahrirlash")
+        kb.add("📢 Habar yuborish", "🗑 Kodni o‘chirish", "📋 Kodlar ro‘yxati")
+        kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -446,6 +451,55 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
         await message.answer(f"✅ Kod {code} o‘chirildi.")
     else:
         await message.answer("❌ Kod topilmadi yoki o‘chirib bo‘lmadi.")
+
+@dp.message_handler(lambda m: m.text == "📤 Post qilish")
+async def start_post_process(message: types.Message):
+    if message.from_user.id in ADMINS:
+        await PostStates.waiting_for_image.set()
+        await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
+async def get_post_image(message: types.Message, state: FSMContext):
+    photo = message.photo[-1].file_id
+    await state.update_data(photo=photo)
+    await PostStates.waiting_for_title.set()
+    await message.answer("📌 Endi rasm ostiga yoziladigan nomni yuboring.")
+@dp.message_handler(state=PostStates.waiting_for_title)
+async def get_post_title(message: Message, state: FSMContext):
+    title = message.text.strip()
+    if len(title) > 1024:
+        await message.answer("❌ Sarlavha juda uzun. Iltimos, 1024 belgidan kamroq kiriting.")
+        return
+
+    await state.update_data(title=title)
+    await PostStates.waiting_for_link.set()
+    await message.answer("🔗 Yuklab olish uchun havolani yuboring.")
+@dp.message_handler(state=PostStates.waiting_for_link)
+async def get_post_link(message: Message, state: FSMContext):
+    data = await state.get_data()
+    photo = data.get("photo")
+    title = data.get("title")
+    link = message.text.strip()
+
+    if not is_valid_url(link):
+        await message.answer("❌ Noto‘g‘ri havola format. Iltimos, to‘liq link yuboring (https://...).")
+        return
+
+    button = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("📥 Yuklab olish", url=link)
+    )
+
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,  # yoki kanalga yuborish uchun CHANNEL_ID
+            photo=photo,
+            caption=title,
+            reply_markup=button
+        )
+        await message.answer("✅ Post muvaffaqiyatli yuborildi.")
+    except Exception as e:
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
+    finally:
+        await state.finish()
 
 # === START ===
 async def on_startup(dp):
