@@ -69,6 +69,11 @@ class UserStates(StatesGroup):
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
 
+class PostStates(StatesGroup):
+    waiting_for_image = State()
+    waiting_for_title = State()
+    waiting_for_link = State()
+
 # === OBUNA TEKSHIRISH ===
 async def is_user_subscribed(user_id):
     for channel in CHANNELS:
@@ -403,6 +408,7 @@ async def start_post_process(message: types.Message):
     if message.from_user.id in ADMINS:
         await PostStates.waiting_for_image.set()
         await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
+        
 @dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
 async def get_post_image(message: types.Message, state: FSMContext):
     photo = message.photo[-1].file_id
