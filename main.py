@@ -49,7 +49,7 @@ async def make_subscribe_markup(code):
     keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return keyboard
 
-ADMINS = [6486825926, 7711928526]
+ADMINS = {6486825926, 7711928526}
 
 # === HOLATLAR ===
 class AdminStates(StatesGroup):
@@ -168,6 +168,34 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
         await message.answer(f"❌ Xatolik: {e}")
     finally:
         await state.finish()
+
+# === Admin qo'shish===
+@dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
+async def add_admin_start(message: types.Message):
+    await message.answer("🆔 Yangi adminning Telegram ID raqamini yuboring.")
+    await AdminStates.waiting_for_admin_id.set()
+
+@dp.message_handler(state=AdminStates.waiting_for_admin_id, user_id=ADMINS)
+async def add_admin_process(message: types.Message, state: FSMContext):
+    await state.finish()
+    text = message.text.strip()
+    
+    if not text.isdigit():
+        await message.answer("❗ Faqat raqam yuboring (Telegram user ID).")
+        return
+
+    new_admin_id = int(text)
+    if new_admin_id in ADMINS:
+        await message.answer("ℹ️ Bu foydalanuvchi allaqachon admin.")
+        return
+
+    ADMINS.add(new_admin_id)
+    await message.answer(f"✅ <code>{new_admin_id}</code> admin sifatida qo‘shildi.", parse_mode="HTML")
+
+    try:
+        await bot.send_message(new_admin_id, "✅ Siz botga admin sifatida qo‘shildingiz.")
+    except:
+        await message.answer("⚠️ Yangi adminga habar yuborib bo‘lmadi.")
 
 # === Kod statistikasi
 @dp.message_handler(lambda m: m.text == "📈 Kod statistikasi")
