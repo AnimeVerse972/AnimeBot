@@ -21,7 +21,7 @@ from database import (
     delete_kino_code,
     get_code_stat,
     increment_stat,
-    get_all_user_id,
+    get_all_user_ids,
     update_anime_code
 )
 
