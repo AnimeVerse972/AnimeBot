@@ -418,11 +418,14 @@ async def kodlar(message: types.Message):
         await message.answer("⛔️ Hech qanday kod topilmadi.")
         return
 
+    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
+
     text = "📄 *Kodlar ro‘yxati:*\n\n"
     for row in kodlar:
-        title = row["title"]  # ✅ to‘g‘ri ishlaydi
         code = row["code"]
-        text += f"*{title}* - `{code}`\n"
+        title = row["title"]
+        text += f"`{code}` - *{title}*\n"
 
     await message.answer(text, parse_mode="Markdown")
 
