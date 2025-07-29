@@ -1,3 +1,4 @@
+# === IMPORTLAR ===
 import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -20,7 +21,7 @@ from database import (
     delete_kino_code,
     get_code_stat,
     increment_stat,
-    get_all_user_ids,
+    get_all_user_id,
     update_anime_code
 )
 
@@ -52,29 +53,34 @@ async def make_subscribe_markup(code):
 ADMINS = {6486825926, 7711928526}
 
 # === HOLATLAR ===
+
+# Adminlar uchun barcha holatlar
 class AdminStates(StatesGroup):
     waiting_for_kino_data = State()
     waiting_for_delete_code = State()
     waiting_for_stat_code = State()
     waiting_for_broadcast_data = State()
+    waiting_for_admin_id = State()  # ➕ Admin qo‘shish uchun
 
+# Admin reply (javob) uchun holat
 class AdminReplyStates(StatesGroup):
     waiting_for_reply_message = State()
 
+# Kod tahrirlash uchun holatlar
 class EditCode(StatesGroup):
     WaitingForOldCode = State()
     WaitingForNewCode = State()
     WaitingForNewTitle = State()
-    
+
+# Foydalanuvchi bilan chatlashish holati
 class UserStates(StatesGroup):
     waiting_for_admin_message = State()
 
-class AdminStates(StatesGroup):
-    waiting_for_admin_id = State()
-    
+# Qidiruv (masalan, anime nomi bo‘yicha)
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
 
+# Post yuborish jarayoni
 class PostStates(StatesGroup):
     waiting_for_image = State()
     waiting_for_title = State()
