@@ -69,6 +69,9 @@ class EditCode(StatesGroup):
 class UserStates(StatesGroup):
     waiting_for_admin_message = State()
 
+class AdminStates(StatesGroup):
+    waiting_for_admin_id = State()
+    
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
 
