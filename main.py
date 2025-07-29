@@ -58,6 +58,9 @@ class AdminStates(StatesGroup):
     waiting_for_stat_code = State()
     waiting_for_broadcast_data = State()
 
+class AdminReplyStates(StatesGroup):
+    waiting_for_reply_message = State()
+
 class EditCode(StatesGroup):
     WaitingForOldCode = State()
     WaitingForNewCode = State()
@@ -124,18 +127,46 @@ async def contact_admin(message: types.Message):
 async def forward_to_admins(message: types.Message, state: FSMContext):
     await state.finish()
     user = message.from_user
+
     for admin_id in ADMINS:
         try:
+            keyboard = InlineKeyboardMarkup().add(
+                InlineKeyboardButton("✉️ Javob yozish", callback_data=f"reply_user:{user.id}")
+            )
+
             await bot.send_message(
                 admin_id,
                 f"📩 <b>Yangi xabar:</b>\n\n"
                 f"<b>👤 Foydalanuvchi:</b> {user.full_name} | <code>{user.id}</code>\n"
                 f"<b>💬 Xabar:</b> {message.text}",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=keyboard
             )
         except Exception as e:
             print(f"Adminga yuborishda xatolik: {e}")
+
     await message.answer("✅ Xabaringiz yuborildi. Tez orada admin siz bilan bog‘lanadi.")
+
+@dp.callback_query_handler(lambda c: c.data.startswith("reply_user:"), user_id=ADMINS)
+async def start_admin_reply(callback: CallbackQuery, state: FSMContext):
+    user_id = int(callback.data.split(":")[1])
+    await state.update_data(reply_user_id=user_id)
+    await AdminReplyStates.waiting_for_reply_message.set()
+    await callback.message.answer("✍️ Endi foydalanuvchiga yubormoqchi bo‘lgan xabaringizni yozing.")
+    await callback.answer()
+
+@dp.message_handler(state=AdminReplyStates.waiting_for_reply_message, user_id=ADMINS)
+async def send_admin_reply(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get("reply_user_id")
+
+    try:
+        await bot.send_message(user_id, f"✉️ Admindan javob:\n\n{message.text}")
+        await message.answer("✅ Javob foydalanuvchiga yuborildi.")
+    except Exception as e:
+        await message.answer(f"❌ Xatolik: {e}")
+    finally:
+        await state.finish()
 
 # === Kod statistikasi
 @dp.message_handler(lambda m: m.text == "📈 Kod statistikasi")
