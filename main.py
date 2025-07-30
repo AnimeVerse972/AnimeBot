@@ -99,6 +99,7 @@ async def is_user_subscribed(user_id):
     return True
 
 # === /start ===
+# === /start – to‘liq versiya (statistika bilan) ===
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
@@ -106,13 +107,21 @@ async def start_handler(message: types.Message):
     args = message.get_args()
     if args and args.isdigit():
         code = args
+        await increment_stat(code, "init")      # /start orqali kirgan
+        await increment_stat(code, "searched")  # qidirilgan
+
         if not await is_user_subscribed(message.from_user.id):
             markup = await make_subscribe_markup(code)
-            await message.answer("❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:", reply_markup=markup)
+            await message.answer(
+                "❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:",
+                reply_markup=markup
+            )
         else:
             await send_reklama_post(message.from_user.id, code)
+            await increment_stat(code, "viewed")  # ko‘rilgan
         return
 
+    # Oddiy /start
     if message.from_user.id in ADMINS:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
