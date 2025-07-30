@@ -123,8 +123,11 @@ async def start_handler(message: types.Message):
         kb.add("➕ Admin qo‘shish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(KeyboardButton("✉️ Admin bilan bog‘lanish", "🎞 Barcha animelar"))
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        kb.add(
+            KeyboardButton("🎞 Barcha animelar"),
+            KeyboardButton("✉️ Admin bilan bog‘lanish")
+        )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
 
 
