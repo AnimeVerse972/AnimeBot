@@ -118,7 +118,7 @@ async def start_handler(message: types.Message):
             )
         else:
             await send_reklama_post(message.from_user.id, code)
-            await increment_stat(code, "viewed")  # ko‘rilgan
+            await increment_stat(code, "searched")  # ko‘rilgan
         return
 
     # Oddiy /start
