@@ -124,9 +124,24 @@ async def start_handler(message: types.Message):
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(KeyboardButton("✉️ Admin bilan bog‘lanish"))
+        kb.add(KeyboardButton("✉️ Admin bilan bog‘lanish", "🎞 Barcha animelar"))
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
 
+
+# === 🎞 Barcha animelar tugmasi
+@dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
+async def show_all_animes(message: types.Message):
+    kodlar = await get_all_codes()
+    if not kodlar:
+        await message.answer("⛔️ Hozircha animelar yoʻq.")
+        return
+
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))  # raqam bo‘yicha tartib
+    text = "📄 *Barcha animelar:*\n\n"
+    for row in kodlar:
+        text += f"`{row['code']}` – *{row['title']}*\n"
+
+    await message.answer(text, parse_mode="Markdown")
 
 # === ✉️ Admin bilan bog‘lanish ===
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
