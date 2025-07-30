@@ -195,40 +195,58 @@ async def handle_help_buttons(callback: CallbackQuery):
     data = callback.data
 
     if data == "help_add":
-        text = "📥 *Anime qo‘shish bo‘yicha qo‘llanma:*\n\n`KOD @kanal ID QISMLAR NOMI` ..."
-    
+        text = (
+            "📥 *Anime qo‘shish* bo‘yicha qo‘llanma:\n\n"
+            "`KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\n"
+            "Misol: `91 @MyKino 4 5 Naruto`\n\n"
+            "- Kod – foydalanuvchining yozadigan raqami\n"
+            "- @kanal – server kanal\n"
+            "- Reklama ID – post ID (1 qo‘shiladi)\n"
+            "- Post soni – qanchta qism bor\n"
+            "- Anime nomi – ko‘rsatiladi"
+        )
+
     elif data == "help_channel":
-        text = "📡 *Kanal yaratish bo‘yicha yordam:*\n\n1. 2 ta kanal yarating ..."
+        text = (
+            "📡 *Kanal yaratish bo‘yicha yordam:*\n\n"
+            "1. Telegramda 2 ta kanal yarating:\n"
+            "   - Server kanal (postlar saqlanadi)\n"
+            "   - Reklama kanal (bot ulashadi)\n"
+            "2. Har ikkalasiga botni admin qiling\n"
+            "3. Kanalni public (username bilan) qiling: `@MyKino`"
+        )
 
     elif data == "help_id":
-        text = "🆔 *Reklama ID olish:*\n\n1. Postni oching, linkni oling..."
+        text = (
+            "🆔 *Reklama ID olish:*\n\n"
+            "1. Server kanalga post joylang (masalan: Naruto 1-qism)\n"
+            "2. Reklama bo‘ladigan post ustiga bosing\n"
+            "3. 'Share' → 'Message link' → linkdan oxirgi sonni oling\n"
+            "   Misol: `https://t.me/MyKino/4` → ID = `4`"
+        )
 
     elif data == "help_code":
-        text = "🔁 *Kod ishlashi:*\n\nFoydalanuvchi kod kiritsa ..."
+        text = (
+            "🔁 *Kod ishlashi:*\n\n"
+            "1. Foydalanuvchi kod yozadi (masalan: `91`)\n"
+            "2. Agar obuna bo‘lmagan bo‘lsa, obuna tugmasi chiqadi\n"
+            "3. Obuna bo‘lsa, reklama post va yuklab olish tugmalari yuboriladi"
+        )
 
     elif data == "help_faq":
-        text = "❓ *Savol-javoblar:*\n\n- Kodni qanday olishadi? ..."
+        text = (
+            "❓ *Tez-tez so‘raladigan savollar:*\n\n"
+            "- Kodni qanday olishadi?\n"
+            "   ➤ Siz ularga link berasiz: `https://t.me/BOT_USERNAME?start=91`\n\n"
+            "- Har safar yangi kanal kerakmi?\n"
+            "   ➤ Yo‘q. Bitta server kanalga ko‘p anime qo‘shishingiz mumkin.\n\n"
+            "- Kodni tahrirlash/o‘chirish bo‘ladimi?\n"
+            "   ➤ Ha, menyudan ✏️ va ❌ tugmalari bor."
+        )
 
-    # Orqaga tugmasi
-    back_button = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("◀️ Orqaga", callback_data="help_back")
-    )
-
-    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=back_button)
+    await callback.message.edit_text(text, parse_mode="Markdown")
     await callback.answer()
-
-@dp.callback_query_handler(lambda c: c.data == "help_back")
-async def help_back_menu(callback: CallbackQuery):
-    keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("📥 Anime qo‘shish", callback_data="help_add"),
-        InlineKeyboardButton("📡 Kanal yaratish", callback_data="help_channel"),
-        InlineKeyboardButton("🆔 Reklama ID olish", callback_data="help_id"),
-        InlineKeyboardButton("🔁 Kod ishlashi", callback_data="help_code"),
-        InlineKeyboardButton("❓ Savol-javob", callback_data="help_faq")
-    )
-    await callback.message.edit_text("📘 Qanday yordam kerak?", reply_markup=keyboard)
-    await callback.answer()
-
+    
 # === Admin qo'shish===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
 async def add_admin_start(message: types.Message):
