@@ -380,14 +380,19 @@ async def back_to_qollanma(callback: types.CallbackQuery):
         await callback.answer()
 
 
-# === Kod statistikasi ===
-@dp.message_handler(lambda m: m.text == "📈 Kod statistikasi", user_id=ADMINS)
+# === 📈 Kod statistikasi ===
+@dp.message_handler(lambda m: m.text == "📈 Kod statistikasi")
 async def ask_stat_code(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await message.answer("📥 Kod raqamini yuboring:")
     await AdminStates.waiting_for_stat_code.set()
 
 @dp.message_handler(state=AdminStates.waiting_for_stat_code)
 async def show_code_stat(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.finish()
     code = message.text.strip()
     if not code:
@@ -547,13 +552,18 @@ async def kino_button(callback: types.CallbackQuery):
 
 
 # === ➕ Anime qo‘shish ===
-@dp.message_handler(lambda m: m.text == "➕ Anime qo‘shish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "➕ Anime qo‘shish")
 async def add_start(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await AdminStates.waiting_for_kino_data.set()
     await message.answer("📝 Format: `KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\nMasalan: `91 @MyKino 4 12 naruto`", parse_mode="Markdown")
 
 @dp.message_handler(state=AdminStates.waiting_for_kino_data)
 async def add_kino_handler(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     rows = message.text.strip().split("\n")
     successful = 0
     failed = 0
