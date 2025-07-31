@@ -33,6 +33,7 @@ keep_alive()
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = os.getenv("CHANNEL_USERNAMES").split(",")
 MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
+SERVER_CHANNEL = os.getenv("SERVER_CHANNEL")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
 bot = Bot(token=API_TOKEN)
@@ -621,7 +622,7 @@ async def process_final_code(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
-    server_channel = CHANNELS[0]  # yoki alohida server kanal
+      server_channel = SERVER_CHANNEL
 
     try:
         # 1. Reklama postini server kanalga yuborish
