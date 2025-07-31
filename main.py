@@ -54,35 +54,28 @@ async def make_subscribe_markup(code):
 ADMINS = {6486825926, 7711928526}
 
 # === HOLATLAR ===
-
-# Adminlar uchun barcha holatlar
 class AdminStates(StatesGroup):
     waiting_for_kino_data = State()
     waiting_for_delete_code = State()
     waiting_for_stat_code = State()
     waiting_for_broadcast_data = State()
-    waiting_for_admin_id = State() 
+    waiting_for_admin_id = State()
     waiting_for_kino_info = State()
 
-# Admin reply (javob) uchun holat
 class AdminReplyStates(StatesGroup):
     waiting_for_reply_message = State()
 
-# Kod tahrirlash uchun holatlar
 class EditCode(StatesGroup):
     WaitingForOldCode = State()
     WaitingForNewCode = State()
     WaitingForNewTitle = State()
 
-# Foydalanuvchi bilan chatlashish holati
 class UserStates(StatesGroup):
     waiting_for_admin_message = State()
 
-# Qidiruv (masalan, anime nomi bo‘yicha)
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
 
-# Post yuborish jarayoni
 class PostStates(StatesGroup):
     waiting_for_image = State()
     waiting_for_title = State()
@@ -528,6 +521,7 @@ async def kino_button(callback: types.CallbackQuery):
     await bot.copy_message(callback.from_user.id, channel, base_id + number - 1)
     await callback.answer()
 
+# === ➕ Anime qo‘shish (Yangilangan) ===
 @dp.message_handler(lambda m: m.text == "➕ Anime qo‘shish")
 async def add_start(message: types.Message):
     if message.from_user.id in ADMINS:
@@ -540,40 +534,27 @@ async def add_start(message: types.Message):
             "❗ Har bir qismni alohida yuboring.",
             parse_mode="Markdown"
         )
-    
+
 @dp.message_handler(content_types=[types.ContentType.PHOTO, types.ContentType.VIDEO], state=AdminStates.waiting_for_kino_data)
 async def receive_media_for_auto_add(message: types.Message, state: FSMContext):
     data = await state.get_data()
     media_list = data.get("media_list", [])
     
-    # Birinchi post — reklama
     if len(media_list) == 0:
-        media_type = "ad"
         await message.answer("✅ Reklama post qabul qilindi. Endi animening qismlarini (videolar) yuboring.")
     else:
-        media_type = "episode"
+        await message.answer(f"✅ Qism qabul qilindi. Hozircha {len(media_list)} ta qism yuborildi.")
     
-    # Ma'lumotlarni saqlash
-    if message.photo:
-        file_id = message.photo[-1].file_id
-        media_type_content = "photo"
-    elif message.video:
-        file_id = message.video.file_id
-        media_type_content = "video"
-    else:
-        await message.answer("Faqat rasm yoki video qabul qilinadi.")
-        return
+    file_id = message.photo[-1].file_id if message.photo else message.video.file_id
+    media_type = "photo" if message.photo else "video"
+    caption = message.caption or ""
 
     media_list.append({
         "file_id": file_id,
-        "type": media_type_content,
-        "content_type": media_type,
-        "caption": message.caption or ""
+        "type": media_type,
+        "caption": caption
     })
-    
     await state.update_data(media_list=media_list)
-    count = len(media_list) - 1  # reklamani sanamay
-    await message.answer(f"✅ Qism qabul qilindi. Hozircha {count} ta qism yuborildi.")
 
 @dp.message_handler(lambda m: m.text == "✅ Tugatdim", state=AdminStates.waiting_for_kino_data)
 async def finalize_media_collection(message: types.Message, state: FSMContext):
@@ -581,20 +562,14 @@ async def finalize_media_collection(message: types.Message, state: FSMContext):
     media_list = data.get("media_list", [])
     
     if len(media_list) < 2:
-        await message.answer("❌ Kamida 1 ta reklama + 1 ta qism kerak. Qaytadan urinib ko'ring.")
+        await message.answer("❌ Kamida 1 ta reklama + 1 ta qism kerak.")
         await state.finish()
         return
 
-    ad_media = media_list[0]
     episodes = media_list[1:]
     total_parts = len(episodes)
 
-    await state.update_data(
-        ad_media=ad_media,
-        episodes=episodes,
-        total_parts=total_parts
-    )
-
+    await state.update_data(episodes=episodes, total_parts=total_parts)
     await message.answer(
         f"🎉 Jami {total_parts} ta qism qabul qilindi!\n\n"
         "📝 Endi quyidagini kiriting:\n"
@@ -615,19 +590,21 @@ async def process_final_code(message: types.Message, state: FSMContext):
     code = parts[0]
     title = parts[1]
 
-    # Kod allaqachon mavjudligini tekshirish
     existing = await get_kino_by_code(code)
     if existing:
         await message.answer(f"❌ `{code}` allaqachon mavjud: *{existing['title']}*", parse_mode="Markdown")
         await state.finish()
         return
 
-      server_channel = SERVER_CHANNEL
+    server_channel = SERVER_CHANNEL  # ✅ To'g'ri joyda
 
     try:
+        data = await state.get_data()
+        ad_media = data["media_list"][0]
+        episodes = data["episodes"]
+
         # 1. Reklama postini server kanalga yuborish
-        ad_media = await state.get_data("ad_media")
-        if ad_media["content_type"] == "photo":
+        if ad_media["type"] == "photo":
             ad_msg = await bot.send_photo(
                 chat_id=server_channel,
                 photo=ad_media["file_id"],
@@ -639,30 +616,22 @@ async def process_final_code(message: types.Message, state: FSMContext):
                 video=ad_media["file_id"],
                 caption=ad_media["caption"]
             )
+        reklama_id = ad_msg.message_id
 
-        reklama_id = ad_msg.message_id  # Bu asl reklama posti
-
-        # 2. Barcha qismlarni server kanalga yuborish
-        for idx, ep in enumerate(state.get("episodes")):
+        # 2. Qismlarni server kanalga yuborish
+        for idx, ep in enumerate(episodes):
+            cap = f"{title} — {idx+1}-qism" if not ep["caption"] else ep["caption"]
             if ep["type"] == "photo":
-                await bot.send_photo(
-                    chat_id=server_channel,
-                    photo=ep["file_id"],
-                    caption=f"{title} — {idx+1}-qism" if not ep["caption"] else ep["caption"]
-                )
-            elif ep["type"] == "video":
-                await bot.send_video(
-                    chat_id=server_channel,
-                    video=ep["file_id"],
-                    caption=f"{title} — {idx+1}-qism" if not ep["caption"] else ep["caption"]
-                )
+                await bot.send_photo(server_channel, ep["file_id"], caption=cap)
+            else:
+                await bot.send_video(server_channel, ep["file_id"], caption=cap)
 
         # 3. DB ga qo'shish
         await add_kino_code(
             code=code,
             channel=server_channel,
-            message_id=reklama_id + 1,  # +1 chunki 1-post reklama, 2-dan boshlab qismlar
-            post_count=len(state.get("episodes")),
+            message_id=reklama_id + 1,
+            post_count=len(episodes),
             title=title
         )
 
@@ -684,7 +653,7 @@ async def process_final_code(message: types.Message, state: FSMContext):
         await message.answer(
             f"✅ *{title}* muvaffaqiyatli qo'shildi!\n"
             f"🔢 Kod: `{code}`\n"
-            f"📦 Jami qismlar: {len(state.get('episodes'))}\n"
+            f"📦 Jami qismlar: {len(episodes)}\n"
             f"🔗 [Foydalanuvchi uchun havola](https://t.me/{BOT_USERNAME}?start={code})",
             parse_mode="Markdown"
         )
