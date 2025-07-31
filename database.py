@@ -1,3 +1,4 @@
+# database.py
 import asyncpg
 import os
 from dotenv import load_dotenv
@@ -6,6 +7,7 @@ load_dotenv()
 
 db_pool = None
 
+# === Foydalanuvchilar jadvali ===
 async def init_db():
     global db_pool
     db_pool = await asyncpg.create_pool(
@@ -17,32 +19,25 @@ async def init_db():
     )
 
     async with db_pool.acquire() as conn:
-        # Foydalanuvchilar jadvali
+        # Foydalanuvchilar
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY
             );
         """)
 
-        # Kodlar jadvali (ilksiz title ustuni bilan)
+        # Anime kodlari
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS kino_codes (
                 code TEXT PRIMARY KEY,
                 channel TEXT,
                 message_id INTEGER,
-                post_count INTEGER
+                post_count INTEGER,
+                title TEXT
             );
         """)
 
-        # title ustunini mavjudligini tekshirish va yo‘q bo‘lsa qo‘shish
-        result = await conn.fetchval("""
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name='kino_codes' AND column_name='title'
-        """)
-        if not result:
-            await conn.execute("ALTER TABLE kino_codes ADD COLUMN title TEXT;")
-
-        # Statistika jadvali
+        # Statistika
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS stats (
                 code TEXT PRIMARY KEY,
@@ -51,8 +46,23 @@ async def init_db():
             );
         """)
 
+        # Adminlar jadvali
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS admins (
+                user_id BIGINT PRIMARY KEY
+            );
+        """)
 
-# === Foydalanuvchi qo‘shish ===
+        # Dastlabki adminlar (o'z IDlaringizni qo'shing)
+        default_admins = [6486825926, 7711928526]
+        for admin_id in default_admins:
+            await conn.execute(
+                "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+                admin_id
+            )
+
+
+# === Foydalanuvchi qo'shish ===
 async def add_user(user_id):
     async with db_pool.acquire() as conn:
         await conn.execute(
@@ -65,7 +75,7 @@ async def get_user_count():
         row = await conn.fetchrow("SELECT COUNT(*) FROM users")
         return row[0]
 
-# === Kod qo‘shish ===
+# === Kod qo'shish ===
 async def add_kino_code(code, channel, message_id, post_count, title):
     async with db_pool.acquire() as conn:
         await conn.execute("""
@@ -92,14 +102,13 @@ async def get_kino_by_code(code):
         """, code)
         return dict(row) if row else None
 
-
 # === Barcha kodlarni olish ===
 async def get_all_codes():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT code, title FROM kino_codes")
         return [{"code": row["code"], "title": row["title"]} for row in rows]
 
-# === Kodni o‘chirish ===
+# === Kodni o'chirish ===
 async def delete_kino_code(code):
     async with db_pool.acquire() as conn:
         await conn.execute("DELETE FROM stats WHERE code = $1", code)
@@ -121,7 +130,7 @@ async def increment_stat(code, field):
                 UPDATE stats SET {field} = {field} + 1 WHERE code = $1
             """, code)
 
-# === Kod statistikasi olish (faqat adminlar uchun) ===
+# === Kod statistikasi olish ===
 async def get_code_stat(code):
     async with db_pool.acquire() as conn:
         return await conn.fetchrow("SELECT searched, viewed FROM stats WHERE code = $1", code)
@@ -138,4 +147,22 @@ async def get_all_user_ids():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT user_id FROM users")
         return [row["user_id"] for row in rows]
-        
+
+# === Barcha adminlarni olish ===
+async def get_all_admins():
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT user_id FROM admins")
+        return {row["user_id"] for row in rows}
+
+# === Yangi admin qo'shish ===
+async def add_admin(user_id: int):
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            user_id
+        )
+
+# === Adminni o'chirish ===
+async def remove_admin(user_id: int):
+    async with db_pool.acquire() as conn:
+        await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
