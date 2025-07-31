@@ -1,7 +1,8 @@
 # main.py
 import os
+import asyncio
 from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, web
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -9,7 +10,6 @@ from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton
 )
-from aiogram.utils import executor
 from keep_alive import keep_alive
 from database import (
     init_db,
@@ -30,7 +30,7 @@ from database import (
 
 # === YUKLAMALAR ===
 load_dotenv()
-keep_alive()
+keep_alive()  # Web server uchun (Flask)
 
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = [ch.strip() for ch in os.getenv("CHANNEL_USERNAMES", "").split(",") if ch.strip()]
@@ -41,7 +41,7 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# ADMINS boshida bo'sh, keyin bazadan yuklanadi
+# ADMINS boshida bo'sh, keyin bazadan to'ldiriladi
 ADMINS = set()
 
 # === HOLATLAR ===
@@ -146,6 +146,7 @@ async def admin_management_menu(message: types.Message):
     kb.add("👥 Adminlar ro‘yxati", "⬅️ Orqaga")
     await message.answer("🔧 Adminlarni boshqarish", reply_markup=kb)
 
+
 # === ➕ ADMIN QO'SHISH ===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish")
 async def add_admin_start(message: types.Message):
@@ -156,6 +157,9 @@ async def add_admin_start(message: types.Message):
 
 @dp.message_handler(state=AdminStates.waiting_for_admin_id)
 async def add_admin_process(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.finish()
     text = message.text.strip()
     if not text.isdigit():
@@ -173,6 +177,7 @@ async def add_admin_process(message: types.Message, state: FSMContext):
     except:
         await message.answer("⚠️ Yangi adminga habar yuborib bo‘lmadi.")
 
+
 # === ➖ ADMIN O'CHIRISH ===
 @dp.message_handler(lambda m: m.text == "➖ Admin o‘chirish")
 async def remove_admin_start(message: types.Message):
@@ -183,6 +188,9 @@ async def remove_admin_start(message: types.Message):
 
 @dp.message_handler(state=AdminStates.waiting_for_delete_admin)
 async def remove_admin_process(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.finish()
     text = message.text.strip()
     if not text.isdigit():
@@ -199,6 +207,7 @@ async def remove_admin_process(message: types.Message, state: FSMContext):
     ADMINS.discard(admin_id)
     await message.answer(f"✅ Admin {admin_id} o'chirildi.")
 
+
 # === 👥 ADMINLAR RO'YXATI ===
 @dp.message_handler(lambda m: m.text == "👥 Adminlar ro‘yxati")
 async def show_admins_list(message: types.Message):
@@ -209,6 +218,7 @@ async def show_admins_list(message: types.Message):
     for admin in admins:
         text += f"• <code>{admin}</code>\n"
     await message.answer(text, parse_mode="HTML")
+
 
 # === ⬅️ ORQAGA TUGMASI ===
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
@@ -223,6 +233,7 @@ async def go_back_to_main_menu(message: types.Message):
     kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
     kb.add("🔧 Adminlarni boshqarish")
     await message.answer("👮‍♂️ Asosiy menyu:", reply_markup=kb)
+
 
 # === 🎞 Barcha animelar tugmasi ===
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
@@ -264,26 +275,6 @@ async def forward_to_admins(message: types.Message, state: FSMContext):
         except Exception as e:
             print(f"Adminga yuborishda xatolik: {e}")
     await message.answer("✅ Xabaringiz yuborildi. Tez orada admin siz bilan bog‘lanadi.")
-
-@dp.callback_query_handler(lambda c: c.data.startswith("reply_user:"), user_id=ADMINS)
-async def start_admin_reply(callback: types.CallbackQuery, state: FSMContext):
-    user_id = int(callback.data.split(":")[1])
-    await state.update_data(reply_user_id=user_id)
-    await AdminReplyStates.waiting_for_reply_message.set()
-    await callback.message.answer("✍️ Endi foydalanuvchiga yubormoqchi bo‘lgan xabaringizni yozing.")
-    await callback.answer()
-
-@dp.message_handler(state=AdminReplyStates.waiting_for_reply_message, user_id=ADMINS)
-async def send_admin_reply(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    user_id = data.get("reply_user_id")
-    try:
-        await bot.send_message(user_id, f"✉️ Admindan javob:\n{message.text}")
-        await message.answer("✅ Javob foydalanuvchiga yuborildi.")
-    except Exception as e:
-        await message.answer(f"❌ Xatolik: {e}")
-    finally:
-        await state.finish()
 
 
 # ==== QO‘LLANMA MENYUSI ====
@@ -380,7 +371,7 @@ async def back_to_qollanma(callback: types.CallbackQuery):
         await callback.answer()
 
 
-# === 📈 Kod statistikasi ===
+# === Kod statistikasi ===
 @dp.message_handler(lambda m: m.text == "📈 Kod statistikasi")
 async def ask_stat_code(message: types.Message):
     if message.from_user.id not in ADMINS:
@@ -411,13 +402,18 @@ async def show_code_stat(message: types.Message, state: FSMContext):
 
 
 # === Kodni tahrirlash ===
-@dp.message_handler(lambda m: m.text == "✏️ Kodni tahrirlash", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "✏️ Kodni tahrirlash")
 async def edit_code_start(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await message.answer("Qaysi kodni tahrirlashni xohlaysiz? (eski kodni yuboring)")
     await EditCode.WaitingForOldCode.set()
 
-@dp.message_handler(state=EditCode.WaitingForOldCode, user_id=ADMINS)
+@dp.message_handler(state=EditCode.WaitingForOldCode)
 async def get_old_code(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     code = message.text.strip()
     post = await get_kino_by_code(code)
     if not post:
@@ -427,14 +423,20 @@ async def get_old_code(message: types.Message, state: FSMContext):
     await message.answer(f"🔎 Kod: {code}\n📌 Nomi: {post['title']}\nYangi kodni yuboring:")
     await EditCode.WaitingForNewCode.set()
 
-@dp.message_handler(state=EditCode.WaitingForNewCode, user_id=ADMINS)
+@dp.message_handler(state=EditCode.WaitingForNewCode)
 async def get_new_code(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.update_data(new_code=message.text.strip())
     await message.answer("Yangi nomini yuboring:")
     await EditCode.WaitingForNewTitle.set()
 
-@dp.message_handler(state=EditCode.WaitingForNewTitle, user_id=ADMINS)
+@dp.message_handler(state=EditCode.WaitingForNewTitle)
 async def get_new_title(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     data = await state.get_data()
     try:
         await update_anime_code(data['old_code'], data['new_code'], message.text.strip())
@@ -460,13 +462,18 @@ async def handle_code_message(message: types.Message):
 
 
 # === 📢 Habar yuborish ===
-@dp.message_handler(lambda m: m.text == "📢 Habar yuborish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "📢 Habar yuborish")
 async def ask_broadcast_info(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await AdminStates.waiting_for_broadcast_data.set()
     await message.answer("📨 Habar yuborish uchun format:\n`@kanal xabar_id`", parse_mode="Markdown")
 
 @dp.message_handler(state=AdminStates.waiting_for_broadcast_data)
 async def send_forward_only(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.finish()
     parts = message.text.strip().split()
     if len(parts) != 2:
@@ -622,13 +629,18 @@ async def stats(message: types.Message):
 
 
 # === Post qilish ===
-@dp.message_handler(lambda m: m.text == "📤 Post qilish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "📤 Post qilish")
 async def start_post_process(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await PostStates.waiting_for_image.set()
     await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
 
 @dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
 async def get_post_image(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     photo = message.photo[-1].file_id
     await state.update_data(photo=photo)
     await PostStates.waiting_for_title.set()
@@ -636,12 +648,18 @@ async def get_post_image(message: types.Message, state: FSMContext):
 
 @dp.message_handler(state=PostStates.waiting_for_title)
 async def get_post_title(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.update_data(title=message.text.strip())
     await PostStates.waiting_for_link.set()
     await message.answer("🔗 Yuklab olish uchun havolani yuboring.")
 
 @dp.message_handler(state=PostStates.waiting_for_link)
 async def get_post_link(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     data = await state.get_data()
     photo = data.get("photo")
     title = data.get("title")
@@ -659,13 +677,18 @@ async def get_post_link(message: types.Message, state: FSMContext):
 
 
 # === ❌ Kodni o‘chirish ===
-@dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish")
 async def ask_delete_code(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await AdminStates.waiting_for_delete_code.set()
     await message.answer("🗑 Qaysi kodni o‘chirmoqchisiz? Kodni yuboring.")
 
 @dp.message_handler(state=AdminStates.waiting_for_delete_code)
 async def delete_code_handler(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMINS:
+        await state.finish()
+        return
     await state.finish()
     code = message.text.strip()
     if not code.isdigit():
