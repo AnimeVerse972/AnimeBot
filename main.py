@@ -211,7 +211,7 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
 async def qollanma(message: types.Message):
     kb = (
         InlineKeyboardMarkup(row_width=1)
-        .add(InlineKeyboardButton("📥 1. Anime qo‘shish",  callback_data="help_add"))
+        .add(InlineKeyboardButton("📥 1. Animeni qo‘shish",  callback_data="help_add"))
         .add(InlineKeyboardButton("📡 2. Kanal yaratish", callback_data="help_channel"))
         .add(InlineKeyboardButton("🆔 3. Reklama ID olish", callback_data="help_id"))
         .add(InlineKeyboardButton("🔁 4. Kod ishlashi", callback_data="help_code"))
@@ -222,7 +222,7 @@ async def qollanma(message: types.Message):
 # =========== BARCHA YORDAM MATNLARI ===========
 HELP_TEXTS = {
     "help_add": (
-        "📥 *Anime qo‘shish*\n\n"
+        "📥 *Animeni qo‘shish*\n\n"
         "`KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\n"
         "Misol: `91 @MyKino 4 12 Naruto`\n"
         "- Kod – foydalanuvchi yozadigan raqam\n"
