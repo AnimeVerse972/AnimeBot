@@ -137,21 +137,24 @@ async def start_handler(message: types.Message):
 
 
 # === 🔧 ADMINLARNI BOSHLASH MENYUSI ===
-@dp.message_handler(lambda m: m.text == "🔧 Adminlarni boshqarish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "🔧 Adminlarni boshqarish")
 async def admin_management_menu(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add("➕ Admin qo‘shish", "➖ Admin o‘chirish")
     kb.add("👥 Adminlar ro‘yxati", "⬅️ Orqaga")
     await message.answer("🔧 Adminlarni boshqarish", reply_markup=kb)
 
-
 # === ➕ ADMIN QO'SHISH ===
-@dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish")
 async def add_admin_start(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await message.answer("🆔 Yangi adminning Telegram ID raqamini yuboring.")
     await AdminStates.waiting_for_admin_id.set()
 
-@dp.message_handler(state=AdminStates.waiting_for_admin_id, user_id=ADMINS)
+@dp.message_handler(state=AdminStates.waiting_for_admin_id)
 async def add_admin_process(message: types.Message, state: FSMContext):
     await state.finish()
     text = message.text.strip()
@@ -170,14 +173,15 @@ async def add_admin_process(message: types.Message, state: FSMContext):
     except:
         await message.answer("⚠️ Yangi adminga habar yuborib bo‘lmadi.")
 
-
 # === ➖ ADMIN O'CHIRISH ===
-@dp.message_handler(lambda m: m.text == "➖ Admin o‘chirish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "➖ Admin o‘chirish")
 async def remove_admin_start(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     await message.answer("🆔 O'chirmoqchi bo'lgan admin ID sini yuboring.")
     await AdminStates.waiting_for_delete_admin.set()
 
-@dp.message_handler(state=AdminStates.waiting_for_delete_admin, user_id=ADMINS)
+@dp.message_handler(state=AdminStates.waiting_for_delete_admin)
 async def remove_admin_process(message: types.Message, state: FSMContext):
     await state.finish()
     text = message.text.strip()
@@ -195,20 +199,22 @@ async def remove_admin_process(message: types.Message, state: FSMContext):
     ADMINS.discard(admin_id)
     await message.answer(f"✅ Admin {admin_id} o'chirildi.")
 
-
 # === 👥 ADMINLAR RO'YXATI ===
-@dp.message_handler(lambda m: m.text == "👥 Adminlar ro‘yxati", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "👥 Adminlar ro‘yxati")
 async def show_admins_list(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     admins = sorted(ADMINS)
     text = "👥 *Hozirgi adminlar:*\n"
     for admin in admins:
         text += f"• <code>{admin}</code>\n"
     await message.answer(text, parse_mode="HTML")
 
-
 # === ⬅️ ORQAGA TUGMASI ===
-@dp.message_handler(lambda m: m.text == "⬅️ Orqaga", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "⬅️ Orqaga")
 async def go_back_to_main_menu(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add("➕ Anime qo‘shish")
     kb.add("📊 Statistika", "📈 Kod statistikasi")
@@ -217,7 +223,6 @@ async def go_back_to_main_menu(message: types.Message):
     kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
     kb.add("🔧 Adminlarni boshqarish")
     await message.answer("👮‍♂️ Asosiy menyu:", reply_markup=kb)
-
 
 # === 🎞 Barcha animelar tugmasi ===
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
