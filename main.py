@@ -595,10 +595,11 @@ async def process_final_code(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
+    # ✅ Bu qator to'g'ri joyda
     server_channel = SERVER_CHANNEL
 
     try:
-        # Barcha ma'lumotlarni olish
+        # ✅ Barcha ma'lumotlarni to'g'ri olish
         data = await state.get_data()
         ad_media = data.get("ad_media")
         episodes = data.get("episodes", [])
@@ -676,7 +677,6 @@ async def process_final_code(message: types.Message, state: FSMContext):
         print("Xatolik:", e)
     finally:
         await state.finish()
-
 
 # === Kodlar ro‘yxati
 @dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
