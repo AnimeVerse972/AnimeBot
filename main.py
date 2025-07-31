@@ -527,4 +527,128 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         code, server_channel, reklama_id, post_count = parts[:4]
         title = " ".join(parts[4:])
 
-        if not (code.isdigit() and reklama_id.isdigit() 
+        if not (code.isdigit() and reklama_id.isdigit() and post_count.isdigit()):
+            failed += 1
+            continue
+
+        reklama_id = int(reklama_id)
+        post_count = int(post_count)
+
+        await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
+
+        download_btn = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("📥 Yuklab olish", url=f"https://t.me/{BOT_USERNAME}?start={code}")
+        )
+
+        try:
+            for ch in MAIN_CHANNELS:
+                await bot.copy_message(
+                    chat_id=ch,
+                    from_chat_id=server_channel,
+                        message_id=reklama_id,
+                reply_markup=download_btn
+        ) 
+            successful += 1
+        except:
+            failed += 1
+
+    await message.answer(f"✅ Yangi kodlar qo‘shildi:\n\n✅ Muvaffaqiyatli: {successful}\n❌ Xatolik: {failed}")
+    await state.finish()
+
+
+# === Kodlar ro‘yxati
+@dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
+async def kodlar(message: types.Message):
+    kodlar = await get_all_codes()
+    if not kodlar:
+        await message.answer("⛔️ Hech qanday kod topilmadi.")
+        return
+
+    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
+
+    text = "📄 *Kodlar ro‘yxati:*\n\n"
+    for row in kodlar:
+        code = row["code"]
+        title = row["title"]
+        text += f"`{code}` - *{title}*\n"
+
+    await message.answer(text, parse_mode="Markdown")
+
+    
+# === Statistika
+@dp.message_handler(lambda m: m.text == "📊 Statistika")
+async def stats(message: types.Message):
+    kodlar = await get_all_codes()
+    foydalanuvchilar = await get_user_count()
+    await message.answer(f"📦 Kodlar: {len(kodlar)}\n👥 Foydalanuvchilar: {foydalanuvchilar}")
+
+@dp.message_handler(lambda m: m.text == "📤 Post qilish")
+async def start_post_process(message: types.Message):
+    if message.from_user.id in ADMINS:
+        await PostStates.waiting_for_image.set()
+        await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
+        
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
+async def get_post_image(message: types.Message, state: FSMContext):
+    photo = message.photo[-1].file_id
+    await state.update_data(photo=photo)
+    await PostStates.waiting_for_title.set()
+    await message.answer("📌 Endi rasm ostiga yoziladigan nomni yuboring.")
+@dp.message_handler(state=PostStates.waiting_for_title)
+async def get_post_title(message: types.Message, state: FSMContext):
+    await state.update_data(title=message.text.strip())
+    await PostStates.waiting_for_link.set()
+    await message.answer("🔗 Yuklab olish uchun havolani yuboring.")
+@dp.message_handler(state=PostStates.waiting_for_link)
+async def get_post_link(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    photo = data.get("photo")
+    title = data.get("title")
+    link = message.text.strip()
+
+    button = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("📥 Yuklab olish", url=link)
+    )
+
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo=photo,
+            caption=title,
+            reply_markup=button
+        )
+        await message.answer("✅ Post muvaffaqiyatli yuborildi.")
+    except Exception as e:
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
+    finally:
+        await state.finish()
+
+
+# === ❌ Kodni o‘chirish
+@dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish")
+async def ask_delete_code(message: types.Message):
+    if message.from_user.id in ADMINS:
+        await AdminStates.waiting_for_delete_code.set()
+        await message.answer("🗑 Qaysi kodni o‘chirmoqchisiz? Kodni yuboring.")
+
+@dp.message_handler(state=AdminStates.waiting_for_delete_code)
+async def delete_code_handler(message: types.Message, state: FSMContext):
+    await state.finish()
+    code = message.text.strip()
+    if not code.isdigit():
+        await message.answer("❗ Noto‘g‘ri format. Kod raqamini yuboring.")
+        return
+    deleted = await delete_kino_code(code)
+    if deleted:
+        await message.answer(f"✅ Kod {code} o‘chirildi.")
+    else:
+        await message.answer("❌ Kod topilmadi yoki o‘chirib bo‘lmadi.")
+
+# === START ===
+async def on_startup(dp):
+    await init_db()
+    print("✅ PostgreSQL bazaga ulandi!")
+
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
