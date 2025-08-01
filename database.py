@@ -1,200 +1,168 @@
+# database.py
 import asyncpg
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+db_pool = None
 
+# === Foydalanuvchilar jadvali ===
 async def init_db():
-    """Ma'lumotlar bazasini ishga tushirish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    
-    # Foydalanuvchilar jadvali
-    await conn.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id BIGINT PRIMARY KEY,
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-    ''')
-    
-    # Kino kodlari jadvali
-    await conn.execute('''
-        CREATE TABLE IF NOT EXISTS kino_codes (
-            code TEXT PRIMARY KEY,
-            channel TEXT NOT NULL,
-            message_id INTEGER NOT NULL,
-            post_count INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-    ''')
-    
-    # Statistika jadvali
-    await conn.execute('''
-        CREATE TABLE IF NOT EXISTS stats (
-            code TEXT,
-            stat_type TEXT,
-            count INTEGER DEFAULT 0,
-            PRIMARY KEY (code, stat_type)
-        )
-    ''')
-    
-    await conn.close()
+    global db_pool
+    db_pool = await asyncpg.create_pool(
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASS"),
+        database=os.getenv("DB_NAME"),
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT"))
+    )
 
+    async with db_pool.acquire() as conn:
+        # Foydalanuvchilar
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id BIGINT PRIMARY KEY
+            );
+        """)
+
+        # Anime kodlari
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS kino_codes (
+                code TEXT PRIMARY KEY,
+                channel TEXT,
+                message_id INTEGER,
+                post_count INTEGER,
+                title TEXT
+            );
+        """)
+
+        # Statistika
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS stats (
+                code TEXT PRIMARY KEY,
+                searched INTEGER DEFAULT 0,
+                viewed INTEGER DEFAULT 0
+            );
+        """)
+
+        # Adminlar jadvali
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS admins (
+                user_id BIGINT PRIMARY KEY
+            );
+        """)
+
+        # Dastlabki adminlar (o'z IDlaringizni qo'shing)
+        default_admins = [6486825926, 7711928526]
+        for admin_id in default_admins:
+            await conn.execute(
+                "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+                admin_id
+            )
+
+
+# === Foydalanuvchi qo'shish ===
 async def add_user(user_id):
-    """Yangi foydalanuvchi qo'shish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    async with db_pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-            user_id
+            "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT DO NOTHING", user_id
         )
-    finally:
-        await conn.close()
 
+# === Foydalanuvchilar soni ===
 async def get_user_count():
-    """Foydalanuvchilar sonini olish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        count = await conn.fetchval("SELECT COUNT(*) FROM users")
-        return count
-    finally:
-        await conn.close()
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT COUNT(*) FROM users")
+        return row[0]
 
+# === Kod qo'shish ===
 async def add_kino_code(code, channel, message_id, post_count, title):
-    """Yangi kino kodi qo'shish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        await conn.execute(
-            "INSERT INTO kino_codes (code, channel, message_id, post_count, title) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (code) DO UPDATE SET channel = $2, message_id = $3, post_count = $4, title = $5",
-            code, channel, message_id, post_count, title
-        )
-    finally:
-        await conn.close()
+    async with db_pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO kino_codes (code, channel, message_id, post_count, title)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (code) DO UPDATE SET
+                channel = EXCLUDED.channel,
+                message_id = EXCLUDED.message_id,
+                post_count = EXCLUDED.post_count,
+                title = EXCLUDED.title;
+        """, code, channel, message_id, post_count, title)
+        await conn.execute("""
+            INSERT INTO stats (code) VALUES ($1)
+            ON CONFLICT DO NOTHING
+        """, code)
 
+# === Kodni olish ===
 async def get_kino_by_code(code):
-    """Kod bo'yicha kino ma'lumotlarini olish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        row = await conn.fetchrow(
-            "SELECT channel, message_id, post_count, title FROM kino_codes WHERE code = $1",
-            code
-        )
-        if row:
-            return {
-                "channel": row["channel"],
-                "message_id": row["message_id"],
-                "post_count": row["post_count"],
-                "title": row["title"]
-            }
-        return None
-    finally:
-        await conn.close()
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT code, channel, message_id, post_count, title
+            FROM kino_codes
+            WHERE code = $1
+        """, code)
+        return dict(row) if row else None
 
+# === Barcha kodlarni olish ===
 async def get_all_codes():
-    """Barcha kodlar ro'yxatini olish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        rows = await conn.fetch("SELECT code, title FROM kino_codes ORDER BY code")
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT code, title FROM kino_codes")
         return [{"code": row["code"], "title": row["title"]} for row in rows]
-    finally:
-        await conn.close()
 
+# === Kodni o'chirish ===
 async def delete_kino_code(code):
-    """Kino kodini o'chirish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        result = await conn.execute("DELETE FROM kino_codes WHERE code = $1", code)
-        # Statistika jadvalidan ham o'chirish
+    async with db_pool.acquire() as conn:
         await conn.execute("DELETE FROM stats WHERE code = $1", code)
-        return result != "DELETE 0"
-    finally:
-        await conn.close()
+        result = await conn.execute("DELETE FROM kino_codes WHERE code = $1", code)
+        return result.endswith("1")
 
+# === Statistika yangilash ===
+async def increment_stat(code, field):
+    if field not in ("searched", "viewed", "init"):
+        return
+    async with db_pool.acquire() as conn:
+        if field == "init":
+            await conn.execute("""
+                INSERT INTO stats (code, searched, viewed) VALUES ($1, 0, 0)
+                ON CONFLICT DO NOTHING
+            """, code)
+        else:
+            await conn.execute(f"""
+                UPDATE stats SET {field} = {field} + 1 WHERE code = $1
+            """, code)
+
+# === Kod statistikasi olish ===
 async def get_code_stat(code):
-    """Kod statistikasini olish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        rows = await conn.fetch("SELECT stat_type, count FROM stats WHERE code = $1", code)
-        if not rows:
-            return None
-        
-        stats = {}
-        for row in rows:
-            stats[row["stat_type"]] = row["count"]
-        
-        return {
-            "searched": stats.get("searched", 0),
-            "viewed": stats.get("viewed", 0)
-        }
-    finally:
-        await conn.close()
+    async with db_pool.acquire() as conn:
+        return await conn.fetchrow("SELECT searched, viewed FROM stats WHERE code = $1", code)
 
-async def increment_stat(code, stat_type):
-    """Statistikani oshirish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        await conn.execute(
-            "INSERT INTO stats (code, stat_type, count) VALUES ($1, $2, 1) ON CONFLICT (code, stat_type) DO UPDATE SET count = stats.count + 1",
-            code, stat_type
-        )
-    finally:
-        await conn.close()
+# === Kod va nomni yangilash ===
+async def update_anime_code(old_code, new_code, new_title):
+    async with db_pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE kino_codes SET code = $1, title = $2 WHERE code = $3
+        """, new_code, new_title, old_code)
 
+# === Barcha foydalanuvchi IDlarini olish ===
 async def get_all_user_ids():
-    """Barcha foydalanuvchi ID larini olish"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
+    async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT user_id FROM users")
         return [row["user_id"] for row in rows]
-    finally:
-        await conn.close()
 
-async def update_anime_code(old_code, new_code, new_title):
-    """Anime kodini va nomini yangilash"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        # Avval eski kod mavjudligini tekshirish
-        exists = await conn.fetchval("SELECT 1 FROM kino_codes WHERE code = $1", old_code)
-        if not exists:
-            raise Exception("Eski kod topilmadi!")
-        
-        # Yangi kod allaqachon mavjud emasligini tekshirish (agar old_code != new_code bo'lsa)
-        if old_code != new_code:
-            exists = await conn.fetchval("SELECT 1 FROM kino_codes WHERE code = $1", new_code)
-            if exists:
-                raise Exception("Yangi kod allaqachon mavjud!")
-        
-        # Transaksiya ichida yangilash
-        async with conn.transaction():
-            # Kino kodini yangilash
-            await conn.execute(
-                "UPDATE kino_codes SET code = $1, title = $2 WHERE code = $3",
-                new_code, new_title, old_code
-            )
-            
-            # Agar kod o'zgargan bo'lsa, statistikani ham yangilash
-            if old_code != new_code:
-                await conn.execute(
-                    "UPDATE stats SET code = $1 WHERE code = $2",
-                    new_code, old_code
-                )
-                
-    finally:
-        await conn.close()
+# === Barcha adminlarni olish ===
+async def get_all_admins():
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT user_id FROM admins")
+        return {row["user_id"] for row in rows}
 
-# ✅ YANGI FUNKSIYA: Anime nomini qidirish
-async def search_anime_by_name(search_query):
-    """Anime nomini qidirish (ILIKE operatori bilan)"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        # ILIKE operatori bilan qidirish (case-insensitive)
-        query = f"%{search_query.lower()}%"
-        rows = await conn.fetch(
-            "SELECT code, title FROM kino_codes WHERE LOWER(title) LIKE $1 ORDER BY title",
-            query
+# === Yangi admin qo'shish ===
+async def add_admin(user_id: int):
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            user_id
         )
-        return [{"code": row["code"], "title": row["title"]} for row in rows]
-    finally:
-        await conn.close()
+
+# === Adminni o'chirish ===
+async def remove_admin(user_id: int):
+    async with db_pool.acquire() as conn:
+        await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
