@@ -108,21 +108,17 @@ async def get_all_codes():
         rows = await conn.fetch("SELECT code, title FROM kino_codes")
         return [{"code": row["code"], "title": row["title"]} for row in rows]
 
-# === Kodni o'chirish (TUZATILGAN) ===
+# === Kodni o'chirish ===
 async def delete_kino_code(code):
     async with db_pool.acquire() as conn:
-        # Avval stats jadvalidan o'chirish
         await conn.execute("DELETE FROM stats WHERE code = $1", code)
-        # So'ng kino_codes jadvalidan o'chirish
         result = await conn.execute("DELETE FROM kino_codes WHERE code = $1", code)
-        # asyncpg da natija "DELETE 1" ko'rinishida qaytadi
-        return result.split()[-1] == "1"
+        return result.endswith("1")
 
-# === Statistika yangilash (TUZATILGAN - SQL injection himoyasi) ===
+# === Statistika yangilash ===
 async def increment_stat(code, field):
     if field not in ("searched", "viewed", "init"):
         return
-    
     async with db_pool.acquire() as conn:
         if field == "init":
             await conn.execute("""
@@ -130,35 +126,21 @@ async def increment_stat(code, field):
                 ON CONFLICT DO NOTHING
             """, code)
         else:
-            # SQL injection himoyasi uchun explicit field nomlari
-            if field == "searched":
-                await conn.execute("""
-                    UPDATE stats SET searched = searched + 1 WHERE code = $1
-                """, code)
-            elif field == "viewed":
-                await conn.execute("""
-                    UPDATE stats SET viewed = viewed + 1 WHERE code = $1
-                """, code)
+            await conn.execute(f"""
+                UPDATE stats SET {field} = {field} + 1 WHERE code = $1
+            """, code)
 
 # === Kod statistikasi olish ===
 async def get_code_stat(code):
     async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT searched, viewed FROM stats WHERE code = $1", code)
-        return dict(row) if row else None
+        return await conn.fetchrow("SELECT searched, viewed FROM stats WHERE code = $1", code)
 
-# === Kod va nomni yangilash (TUZATILGAN - stats bilan sinxronlash) ===
+# === Kod va nomni yangilash ===
 async def update_anime_code(old_code, new_code, new_title):
     async with db_pool.acquire() as conn:
-        async with conn.transaction():
-            # Kino kodini yangilash
-            await conn.execute("""
-                UPDATE kino_codes SET code = $1, title = $2 WHERE code = $3
-            """, new_code, new_title, old_code)
-            
-            # Stats jadvalida ham kod nomini yangilash
-            await conn.execute("""
-                UPDATE stats SET code = $1 WHERE code = $2
-            """, new_code, old_code)
+        await conn.execute("""
+            UPDATE kino_codes SET code = $1, title = $2 WHERE code = $3
+        """, new_code, new_title, old_code)
 
 # === Barcha foydalanuvchi IDlarini olish ===
 async def get_all_user_ids():
@@ -166,17 +148,11 @@ async def get_all_user_ids():
         rows = await conn.fetch("SELECT user_id FROM users")
         return [row["user_id"] for row in rows]
 
-# === Barcha adminlarni olish (YANGILANGAN) ===
+# === Barcha adminlarni olish ===
 async def get_all_admins():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT user_id FROM admins")
         return {row["user_id"] for row in rows}
-
-# === Admin tekshirish (YANGI) ===
-async def is_admin(user_id: int):
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT user_id FROM admins WHERE user_id = $1", user_id)
-        return row is not None
 
 # === Yangi admin qo'shish ===
 async def add_admin(user_id: int):
@@ -189,33 +165,4 @@ async def add_admin(user_id: int):
 # === Adminni o'chirish ===
 async def remove_admin(user_id: int):
     async with db_pool.acquire() as conn:
-        result = await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
-        return result.split()[-1] == "1"
-
-# === Database dan adminlarni olish va global ADMINS ni sinxronlash (YANGI) ===
-async def sync_admins_with_db():
-    """Database dan adminlarni olib, global ADMINS set ni yangilaydi"""
-    return await get_all_admins()
-
-# === Barcha ma'lumotlarni o'chirish (development uchun) ===
-async def clear_all_data():
-    """EHTIYOT: Barcha ma'lumotlarni o'chiradi!"""
-    async with db_pool.acquire() as conn:
-        await conn.execute("DELETE FROM stats")
-        await conn.execute("DELETE FROM kino_codes") 
-        await conn.execute("DELETE FROM users")
-        # Adminlarni o'chirmaymiz
-        
-# === Database holati haqida ma'lumot ===
-async def get_db_info():
-    """Database haqida umumiy ma'lumot"""
-    async with db_pool.acquire() as conn:
-        users_count = await conn.fetchval("SELECT COUNT(*) FROM users")
-        codes_count = await conn.fetchval("SELECT COUNT(*) FROM kino_codes")
-        admins_count = await conn.fetchval("SELECT COUNT(*) FROM admins")
-        
-        return {
-            "users": users_count,
-            "codes": codes_count, 
-            "admins": admins_count
-        }
+        await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
