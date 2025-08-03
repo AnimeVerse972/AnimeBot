@@ -99,6 +99,17 @@ async def get_unsubscribed_channels(user_id):
             unsubscribed.append(channel)
     return unsubscribed
 
+async def is_user_subscribed(user_id):
+    for channel in CHANNELS:
+        try:
+            member = await bot.get_chat_member(channel.strip(), user_id)
+            if member.status not in ["member", "administrator", "creator"]:
+                return False
+        except Exception as e:
+            print(f"❗ Obuna holatini aniqlab bo‘lmadi: {channel} -> {e}")
+            return False
+    return True
+    
 # === BARCHA KANALLAR UCHUN OBUNA MARKUP ===
 async def make_full_subscribe_markup(code):
     markup = InlineKeyboardMarkup(row_width=1)
@@ -174,6 +185,8 @@ async def check_subscription_callback(call: CallbackQuery):
         await call.message.delete()
         await send_reklama_post(call.from_user.id, code)
         await increment_stat(code, "searched")
+
+
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
