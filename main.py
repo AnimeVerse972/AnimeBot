@@ -86,42 +86,56 @@ class PostStates(StatesGroup):
     waiting_for_title = State()
     waiting_for_link = State()
 
-# === OBUNA TEKSHIRISH ===
-async def is_user_subscribed(user_id):
+# === OBUNA TEKSHIRISH FUNKSIYASI ===
+async def get_unsubscribed_channels(user_id):
+    unsubscribed = []
     for channel in CHANNELS:
         try:
             member = await bot.get_chat_member(channel.strip(), user_id)
             if member.status not in ["member", "administrator", "creator"]:
-                return False
+                unsubscribed.append(channel)
         except Exception as e:
             print(f"❗ Obuna tekshirishda xatolik: {channel} -> {e}")
-            return False
-    return True
+            unsubscribed.append(channel)
+    return unsubscribed
 
-# === /start ===
-# === /start – to‘liq versiya (statistika bilan) ===
+# === BARCHA KANALLAR UCHUN OBUNA MARKUP ===
+async def make_full_subscribe_markup(code):
+    markup = InlineKeyboardMarkup(row_width=1)
+    for ch in CHANNELS:
+        try:
+            channel = await bot.get_chat(ch.strip())
+            invite_link = channel.invite_link or (await channel.export_invite_link())
+            markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
+        except Exception as e:
+            print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
+    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
+    return markup
+
+# === /start HANDLER – to‘liq versiya (statistika bilan) ===
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
-
     args = message.get_args()
+
     if args and args.isdigit():
         code = args
-        await increment_stat(code, "init")      # /start orqali kirgan
-        await increment_stat(code, "searched")  # qidirilgan
+        await increment_stat(code, "init")
+        await increment_stat(code, "searched")
 
-        if not await is_user_subscribed(message.from_user.id):
-            markup = await make_subscribe_markup(code)
+        unsubscribed = await get_unsubscribed_channels(message.from_user.id)
+        if unsubscribed:
+            markup = await make_full_subscribe_markup(code)
             await message.answer(
                 "❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:",
                 reply_markup=markup
             )
         else:
             await send_reklama_post(message.from_user.id, code)
-            await increment_stat(code, "searched")  # ko‘rilgan
+            await increment_stat(code, "searched")
         return
 
-    # Oddiy /start
+    # === Oddiy /start ===
     if message.from_user.id in ADMINS:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
@@ -139,7 +153,27 @@ async def start_handler(message: types.Message):
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
 
+# === TEKSHIRUV CALLBACK – faqat obuna bo‘lmaganlar uchun ===
+@dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
+async def check_subscription_callback(call: CallbackQuery):
+    code = call.data.split(":")[1]
+    unsubscribed = await get_unsubscribed_channels(call.from_user.id)
 
+    if unsubscribed:
+        markup = InlineKeyboardMarkup(row_width=1)
+        for ch in unsubscribed:
+            try:
+                channel = await bot.get_chat(ch.strip())
+                invite_link = channel.invite_link or (await channel.export_invite_link())
+                markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
+            except Exception as e:
+                print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
+        markup.add(InlineKeyboardButton("✅ Yana tekshirish", callback_data=f"checksub:{code}"))
+        await call.message.edit_text("❗ Obuna bo‘lmagan kanal(lar):", reply_markup=markup)
+    else:
+        await call.message.delete()
+        await send_reklama_post(call.from_user.id, code)
+        await increment_stat(code, "searched")
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
