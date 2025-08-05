@@ -1,4 +1,3 @@
-# konkurs.py
 import os
 import json
 import random
@@ -16,7 +15,7 @@ CONTEST_FILE = os.path.join(DATA_DIR, "contest.json")
 #   "active": false,
 #   "post_message": "matn yoki bo'sh",
 #   "participants": [123, 456, ...],
-#   "winners": []  # 1-, 2-, 3-o'rin ketma-ketlikda ID lar
+#   "winners": []  # 1-, 2-, 3-o'rin ID lar
 # }
 
 class ContestStates(StatesGroup):
@@ -67,24 +66,30 @@ def _join_kb():
     kb.add(InlineKeyboardButton("✅ Ishtirok etish", callback_data="contest_join"))
     return kb
 
-# === SHU YERGA E’TIBOR: MAIN_CHANNELS endi parametr sifatida olinadi ===
-def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
+def _norm(text: str) -> str:
+    return (text or "").strip().lower()
+
+# === MAIN_CHANNELS ni import vaqtida emas, ro'yxatdan o'tkazishda o‘qiymiz ===
+def register_konkurs_handlers(dp, bot, ADMINS):
     """
     main.py da:
         from konkurs import register_konkurs_handlers
         ...
-        register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS)
+        register_konkurs_handlers(dp, bot, ADMINS)
     """
+    # load_dotenv() allaqachon main.py da chaqirilgan bo'ladi
+    env_main_channels = os.getenv("MAIN_CHANNELS", "")
+    MAIN_CHANNELS = [c.strip() for c in env_main_channels.split(",") if c.strip()]
 
-    # --- Admin panelda '🏆 Konkurs'
-    @dp.message_handler(lambda m: m.text == "🏆 Konkurs", user_id=list(ADMINS))
+    # --- Admin panel: '🏆 Konkurs'
+    @dp.message_handler(lambda m: _norm(m.text) == "🏆 konkurs".lower() and m.from_user and m.from_user.id in ADMINS)
     async def contest_admin_menu(message: types.Message):
         st = _load_state()
         kb = _admin_menu_kb_contest(st["active"], len(st["winners"]))
         await message.answer("🏆 Konkurs boshqaruvi:", reply_markup=kb)
 
-    # --- ▶️ Konkursni boshlash
-   @dp.message_handler(lambda m: m.text == "▶️ Konkursni boshlash", user_id=ADMINS)
+    # --- ▶️ Konkursni boshlash (reply tugma)
+    @dp.message_handler(lambda m: ("konkursni boshlash" in _norm(m.text)) and m.from_user and m.from_user.id in ADMINS)
     async def start_contest(message: types.Message, state_ctx: FSMContext):
         st = _load_state()
         if st["active"]:
@@ -101,19 +106,19 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         _save_state(st)
 
         # Kanallarga e'lon
-        for ch in (MAIN_CHANNELS or []):
-            ch = str(ch).strip()
-            if not ch:
-                continue
-            try:
-                await bot.send_message(
-                    chat_id=_as_chat_id(ch),
-                    text=st["post_message"],
-                    reply_markup=_join_kb(),
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                print(f"[KONKURS] E’lon yuborishda xatolik: {ch} -> {e}")
+        if not MAIN_CHANNELS:
+            await message.answer("⚠️ MAIN_CHANNELS topilmadi. .env faylni tekshiring.")
+        else:
+            for ch in MAIN_CHANNELS:
+                try:
+                    await bot.send_message(
+                        chat_id=_as_chat_id(ch),
+                        text=st["post_message"],
+                        reply_markup=_join_kb(),
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    print(f"[KONKURS] E’lon yuborishda xatolik: {ch} -> {e}")
 
         kb = _admin_menu_kb_contest(True, 0)
         await message.answer(
@@ -153,7 +158,7 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
             pass
 
     # --- 👥 Ishtirokchilar
-    @dp.message_handler(lambda m: m.text == "👥 Ishtirokchilar", user_id=list(ADMINS))
+    @dp.message_handler(lambda m: ("ishtirokchilar" in _norm(m.text)) and m.from_user and m.from_user.id in ADMINS)
     async def list_participants(message: types.Message):
         st = _load_state()
         cnt = len(st["participants"])
@@ -168,7 +173,7 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         await message.answer(text, parse_mode="HTML")
 
     # --- 🏁 G‘olibni aniqlash (1/3)
-    @dp.message_handler(lambda m: m.text.startswith("🏁 G‘olibni aniqlash"), user_id=list(ADMINS))
+    @dp.message_handler(lambda m: ("g‘olibni aniqlash" in _norm(m.text) or "golibni aniqlash" in _norm(m.text)) and m.from_user and m.from_user.id in ADMINS)
     async def pick_winner(message: types.Message):
         st = _load_state()
         if not st["active"]:
@@ -203,7 +208,7 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         await message.answer("Davom etish:", reply_markup=kb)
 
     # --- ⛔ Konkursni tugatish
-    @dp.message_handler(lambda m: m.text == "⛔ Konkursni tugatish", user_id=list(ADMINS))
+    @dp.message_handler(lambda m: ("konkursni tugatish" in _norm(m.text)) and m.from_user and m.from_user.id in ADMINS)
     async def end_contest(message: types.Message):
         st = _load_state()
         if not st["active"]:
@@ -225,17 +230,17 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         else:
             text = "🏁 *Konkurs tugadi!* G‘oliblar aniqlanmadi."
 
-        for ch in (MAIN_CHANNELS or []):
-            ch = str(ch).strip()
-            if not ch:
-                continue
-            try:
-                await message.bot.send_message(
-                    chat_id=_as_chat_id(ch),
-                    text=text,
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                print(f"[KONKURS] Tugash e’loni xatosi: {ch} -> {e}")
+        if not MAIN_CHANNELS:
+            await message.answer("⚠️ MAIN_CHANNELS topilmadi. .env faylni tekshiring.")
+        else:
+            for ch in MAIN_CHANNELS:
+                try:
+                    await message.bot.send_message(
+                        chat_id=_as_chat_id(ch),
+                        text=text,
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    print(f"[KONKURS] Tugash e’loni xatosi: {ch} -> {e}")
 
         await message.answer("✅ Konkurs tugatildi.", reply_markup=_admin_menu_kb_contest(False, len(winners)))
