@@ -6,22 +6,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 db_pool = None
+ADMINS_CACHE = set()  # RAM da adminlar
 
 # === Foydalanuvchilar jadvali ===
 async def init_db():
-    global db_pool
+    global db_pool, ADMINS_CACHE
     db_pool = await asyncpg.create_pool(os.getenv("DATABASE_URL"))
 
     async with db_pool.acquire() as conn:
-        # Foydalanuvchilar
+        # Jadvallar
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY
             );
-        """)
-
-        # Anime kodlari
-        await conn.execute("""
             CREATE TABLE IF NOT EXISTS kino_codes (
                 code TEXT PRIMARY KEY,
                 channel TEXT,
@@ -29,30 +26,23 @@ async def init_db():
                 post_count INTEGER,
                 title TEXT
             );
-        """)
-
-        # Statistika
-        await conn.execute("""
             CREATE TABLE IF NOT EXISTS stats (
                 code TEXT PRIMARY KEY,
                 searched INTEGER DEFAULT 0
             );
-        """)
-
-        # Adminlar
-        await conn.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 user_id BIGINT PRIMARY KEY
             );
         """)
 
-        # Dastlabki adminlar
+        # Adminlarni yuklash
         default_admins = [6486825926, 7711928526]
-        for admin_id in default_admins:
-            await conn.execute(
-                "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
-                admin_id
-            )
+        await conn.executemany(
+            "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            [(admin_id,) for admin_id in default_admins]
+        )
+        rows = await conn.fetch("SELECT user_id FROM admins")
+        ADMINS_CACHE = {row["user_id"] for row in rows}
 
 # === Foydalanuvchi qo'shish ===
 async def add_user(user_id):
@@ -64,13 +54,13 @@ async def add_user(user_id):
 # === Foydalanuvchilar soni ===
 async def get_user_count():
     async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT COUNT(*) FROM users")
-        return row[0]
+        return (await conn.fetchval("SELECT COUNT(*) FROM users"))
 
 # === Kod qo'shish ===
 async def add_kino_code(code, channel, message_id, post_count, title):
     async with db_pool.acquire() as conn:
         await conn.execute("""
+            BEGIN;
             INSERT INTO kino_codes (code, channel, message_id, post_count, title)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (code) DO UPDATE SET
@@ -78,11 +68,10 @@ async def add_kino_code(code, channel, message_id, post_count, title):
                 message_id = EXCLUDED.message_id,
                 post_count = EXCLUDED.post_count,
                 title = EXCLUDED.title;
-        """, code, channel, message_id, post_count, title)
-        await conn.execute("""
             INSERT INTO stats (code) VALUES ($1)
-            ON CONFLICT DO NOTHING
-        """, code)
+            ON CONFLICT DO NOTHING;
+            COMMIT;
+        """, code, channel, message_id, post_count, title)
 
 # === Kodni olish ===
 async def get_kino_by_code(code):
@@ -98,14 +87,18 @@ async def get_kino_by_code(code):
 async def get_all_codes():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT code, title FROM kino_codes")
-        return [{"code": row["code"], "title": row["title"]} for row in rows]
+        return [{"code": r["code"], "title": r["title"]} for r in rows]
 
 # === Kodni o'chirish ===
 async def delete_kino_code(code):
     async with db_pool.acquire() as conn:
-        await conn.execute("DELETE FROM stats WHERE code = $1", code)
-        result = await conn.execute("DELETE FROM kino_codes WHERE code = $1", code)
-        return result.endswith("1")
+        result = await conn.execute("""
+            BEGIN;
+            DELETE FROM stats WHERE code = $1;
+            DELETE FROM kino_codes WHERE code = $1;
+            COMMIT;
+        """, code)
+        return "DELETE" in result  # natija qaytadi
 
 # === Statistika yangilash ===
 async def increment_stat(code, field):
@@ -113,14 +106,14 @@ async def increment_stat(code, field):
         return
     async with db_pool.acquire() as conn:
         if field == "init":
-            await conn.execute("""
-                INSERT INTO stats (code, searched) VALUES ($1, 0)
-                ON CONFLICT DO NOTHING
-            """, code)
+            await conn.execute(
+                "INSERT INTO stats (code, searched) VALUES ($1, 0) ON CONFLICT DO NOTHING",
+                code
+            )
         else:
-            await conn.execute(f"""
-                UPDATE stats SET {field} = {field} + 1 WHERE code = $1
-            """, code)
+            await conn.execute(
+                f"UPDATE stats SET {field} = {field} + 1 WHERE code = $1", code
+            )
 
 # === Kod statistikasi olish ===
 async def get_code_stat(code):
@@ -137,17 +130,16 @@ async def update_anime_code(old_code, new_code, new_title):
 # === Barcha foydalanuvchi IDlarini olish ===
 async def get_all_user_ids():
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT user_id FROM users")
-        return [row["user_id"] for row in rows]
+        return [r["user_id"] for r in await conn.fetch("SELECT user_id FROM users")]
 
-# === Barcha adminlarni olish ===
-async def get_all_admins():
-    async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT user_id FROM admins")
-        return {row["user_id"] for row in rows}
+# === Admin RAM dan olish ===
+def get_all_admins():
+    return ADMINS_CACHE
 
-# === Yangi admin qo'shish ===
+# === Admin qo'shish ===
 async def add_admin(user_id: int):
+    global ADMINS_CACHE
+    ADMINS_CACHE.add(user_id)
     async with db_pool.acquire() as conn:
         await conn.execute(
             "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
@@ -156,5 +148,7 @@ async def add_admin(user_id: int):
 
 # === Adminni o'chirish ===
 async def remove_admin(user_id: int):
+    global ADMINS_CACHE
+    ADMINS_CACHE.discard(user_id)
     async with db_pool.acquire() as conn:
         await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
