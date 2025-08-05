@@ -247,8 +247,10 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
     finally:
         await state.finish()
 
-@dp.message_handler(lambda m: m.text == "🎯 Konkurs", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "🎯 Konkurs")
 async def contest_menu(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
     active = await get_active_contest()
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(InlineKeyboardButton("🆕 Konkursni boshlash", callback_data="start_contest"))
@@ -256,13 +258,15 @@ async def contest_menu(message: types.Message):
         kb.add(InlineKeyboardButton("🛑 Konkursni tugatish", callback_data="finish_contest"))
     await message.answer("🎯 Konkurs boshqaruvi:", reply_markup=kb)
 
-@dp.callback_query_handler(lambda c: c.data == "start_contest", user_id=ADMINS)
+
+@dp.callback_query_handler(lambda c: c.data == "start_contest")
 async def start_contest_prompt(callback: CallbackQuery):
     await ContestStates.waiting_for_contest_text.set()
     await callback.message.answer("📝 Konkurs uchun matnni yuboring:")
     await callback.answer()
 
-@dp.callback_query_handler(lambda c: c.data == "finish_contest", user_id=ADMINS)
+
+@dp.callback_query_handler(lambda c: c.data == "finish_contest")
 async def finish_contest_now(callback: CallbackQuery):
     success = await finish_contest()
     if success:
@@ -271,13 +275,15 @@ async def finish_contest_now(callback: CallbackQuery):
         await callback.message.answer("❌ Aktiv konkurs topilmadi.")
     await callback.answer()
 
-@dp.message_handler(state=ContestStates.waiting_for_contest_text, user_id=ADMINS)
+
+@dp.message_handler(state=ContestStates.waiting_for_contest_text)
 async def get_contest_text(message: types.Message, state: FSMContext):
     await state.update_data(text=message.text)
     await ContestStates.next()
     await message.answer("🖼 Endi rasm yuboring:")
 
-@dp.message_handler(content_types=types.ContentType.PHOTO, state=ContestStates.waiting_for_contest_photo, user_id=ADMINS)
+
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=ContestStates.waiting_for_contest_photo)
 async def get_contest_photo(message: types.Message, state: FSMContext):
     photo_id = message.photo[-1].file_id
     data = await state.get_data()
@@ -295,7 +301,7 @@ async def get_contest_photo(message: types.Message, state: FSMContext):
             invite_link = chat.invite_link or (await chat.export_invite_link())
             kb.add(InlineKeyboardButton(f"🔔 {chat.title}", url=invite_link))
         except Exception as e:
-            print(f"Kanal link xato: {e}")
+            logging.error(f"Kanal link xato: {e}")
 
     for main_ch in MAIN_CHANNELS:
         try:
@@ -303,7 +309,7 @@ async def get_contest_photo(message: types.Message, state: FSMContext):
             invite_link = chat.invite_link or (await chat.export_invite_link())
             kb.add(InlineKeyboardButton(f"🏆 Asosiy kanal", url=invite_link))
         except Exception as e:
-            print(f"Asosiy kanal xato: {e}")
+            logging.error(f"Asosiy kanal xato: {e}")
 
     for ch in CHANNELS + MAIN_CHANNELS:
         try:
@@ -314,10 +320,11 @@ async def get_contest_photo(message: types.Message, state: FSMContext):
                 reply_markup=kb
             )
         except Exception as e:
-            print(f"Kanalga yuborishda xato: {ch} -> {e}")
+            logging.error(f"Kanalga yuborishda xato: {ch} -> {e}")
 
     await message.answer("✅ Konkurs barcha kanallarga yuborildi!")
     await state.finish()
+
 
 @dp.callback_query_handler(lambda c: c.data == "join_contest")
 async def join_contest_handler(callback: CallbackQuery):
@@ -348,10 +355,12 @@ async def invite_friends(message: types.Message):
         disable_web_page_preview=True
     )
 
+
 @dp.message_handler(lambda m: m.text == "📊 Mening hisobim")
 async def my_stats(message: types.Message):
     referrals = await get_user_referrals(message.from_user.id)
     await message.answer(f"👥 Siz {referrals} kishi taklif qildingiz.")
+
 
 @dp.message_handler(lambda m: m.text == "🏆 Top 10")
 async def top_10(message: types.Message):
