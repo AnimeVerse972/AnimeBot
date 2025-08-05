@@ -344,8 +344,7 @@ async def join_contest_handler(callback: CallbackQuery):
 async def invite_friends(message: types.Message):
     link = f"https://t.me/{BOT_USERNAME}?start={message.from_user.id}"
     await message.answer(
-        f"🔗 Do'stlaringizni ushbu havola orqali taklif qiling:
-{link}",
+        f"🔗 Do'stlaringizni ushbu havola orqali taklif qiling:\n{link}",
         disable_web_page_preview=True
     )
 
@@ -360,13 +359,10 @@ async def top_10(message: types.Message):
     if not top:
         await message.answer("Hali hech kim qatnashmagan.")
         return
-    text = "🏆 *TOP 10 gacha taklif qilganlar:*
-"
+    text = "🏆 *TOP 10 gacha taklif qilganlar:*\n"
     for i, p in enumerate(top, 1):
-        text += f"{i}. 👤 `{p['user_id']}` — {p['referrals']} ta
-"
+        text += f"{i}. 👤 `{p['user_id']}` — {p['referrals']} ta\n"
     await message.answer(text, parse_mode="Markdown")
-
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
