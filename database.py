@@ -56,11 +56,10 @@ async def get_user_count():
     async with db_pool.acquire() as conn:
         return (await conn.fetchval("SELECT COUNT(*) FROM users"))
 
-# === Kod qo'shish ===
+# === Kod qo‘shish ===
 async def add_kino_code(code, channel, message_id, post_count, title):
     async with db_pool.acquire() as conn:
         await conn.execute("""
-            BEGIN;
             INSERT INTO kino_codes (code, channel, message_id, post_count, title)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (code) DO UPDATE SET
@@ -68,11 +67,12 @@ async def add_kino_code(code, channel, message_id, post_count, title):
                 message_id = EXCLUDED.message_id,
                 post_count = EXCLUDED.post_count,
                 title = EXCLUDED.title;
-            INSERT INTO stats (code) VALUES ($1)
-            ON CONFLICT DO NOTHING;
-            COMMIT;
         """, code, channel, message_id, post_count, title)
-
+        await conn.execute("""
+            INSERT INTO stats (code) VALUES ($1)
+            ON CONFLICT DO NOTHING
+        """, code)
+        
 # === Kodni olish ===
 async def get_kino_by_code(code):
     async with db_pool.acquire() as conn:
