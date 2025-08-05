@@ -84,7 +84,7 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         await message.answer("🏆 Konkurs boshqaruvi:", reply_markup=kb)
 
     # --- ▶️ Konkursni boshlash
-    @dp.message_handler(lambda m: m.text == "▶️ Konkursni boshlash", user_id=list(ADMINS))
+   @dp.message_handler(lambda m: m.text == "▶️ Konkursni boshlash", user_id=ADMINS)
     async def start_contest(message: types.Message, state_ctx: FSMContext):
         st = _load_state()
         if st["active"]:
