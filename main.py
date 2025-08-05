@@ -611,12 +611,12 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         # Faqat ma'lumotlarni bazaga qo'shamiz
         await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
         
-    # Barcha qo'shish tugagandan keyin natijani bildiramiz
-    await message.answer(f"✅ Yangi kodlar qo‘shildi:)
+# Barcha qo'shish tugagandan keyin natijani bildiramiz
+await message.answer(f"""✅ Yangi kodlar qo‘shildi:
 ✅ Muvaffaqiyatli: {len(rows) - failed}
-❌ Xatolik: {failed}")
-    
-    await state.finish()
+❌ Xatolik: {failed}""")
+
+await state.finish()
 
 
 # === Kodlar ro‘yxati
