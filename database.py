@@ -35,8 +35,7 @@ async def init_db():
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS stats (
                 code TEXT PRIMARY KEY,
-                searched INTEGER DEFAULT 0,
-                viewed INTEGER DEFAULT 0
+                searched INTEGER DEFAULT 0
             );
         """)
 
@@ -110,12 +109,12 @@ async def delete_kino_code(code):
 
 # === Statistika yangilash ===
 async def increment_stat(code, field):
-    if field not in ("searched", "viewed", "init"):
+    if field not in ("searched", "init"):
         return
     async with db_pool.acquire() as conn:
         if field == "init":
             await conn.execute("""
-                INSERT INTO stats (code, searched, viewed) VALUES ($1, 0, 0)
+                INSERT INTO stats (code, searched) VALUES ($1, 0)
                 ON CONFLICT DO NOTHING
             """, code)
         else:
@@ -126,7 +125,7 @@ async def increment_stat(code, field):
 # === Kod statistikasi olish ===
 async def get_code_stat(code):
     async with db_pool.acquire() as conn:
-        return await conn.fetchrow("SELECT searched, viewed FROM stats WHERE code = $1", code)
+        return await conn.fetchrow("SELECT searched FROM stats WHERE code = $1", code)
 
 # === Kod va nomni yangilash ===
 async def update_anime_code(old_code, new_code, new_title):
