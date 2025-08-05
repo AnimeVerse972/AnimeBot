@@ -734,9 +734,8 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
 
 async def on_startup(dp):
     await init_db()
-    register_konkurs_handlers(dp, bot, ADMINS)
+    register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS)
     print("✅ PostgreSQL bazaga ulandi!")
-
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)    
