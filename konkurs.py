@@ -86,9 +86,9 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         await message.answer("🏆 Konkurs boshqaruvi:", reply_markup=kb)
 
     # --- ▶️ Konkursni boshlash (reply tugma)
-    @dp.message_handler(lambda m: m.text.startswith("▶️ Konkursni boshlash"), user_id=ADMINS)
+    @@dp.message_handler(lambda m: m.text == "▶️ Konkursni boshlash", user_id=ADMINS)
     async def start_contest_test(message: types.Message):
-    await message.answer("✅ Konkurs start ishladi!")
+        await message.answer("✅ Konkurs start ishladi!")
 
     # --- Callback: Ishtirok etish
     @dp.callback_query_handler(lambda c: c.data == "contest_join")
