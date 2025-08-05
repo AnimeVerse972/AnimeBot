@@ -324,20 +324,13 @@ async def join_contest_handler(callback: CallbackQuery):
     user_id = callback.from_user.id
     await add_contest_participant(user_id)
 
-    rules = (
-        "📜 *Qatnashish shartlari:*
-"
-        "1. Yuqoridagi barcha kanallarga obuna bo'ling.
-"
-        "2. Do'stlaringizni taklif qiling — har biri uchun 1 ball.
-"
-        "3. G'oliblar:
-"
-        "   • 1-va 2-o'rinni eng ko'p taklif qilganlar oladi.
-"
-        "   • 3-o'rinni tasodifiy tanlaymiz.
-"
-    )
+     rules = """📜 *Qatnashish shartlari:*
+1. Yuqoridagi barcha kanallarga obuna bo'ling.
+2. Do'stlaringizni taklif qiling — har biri uchun 1 ball.
+3. G'oliblar:
+   • 1-va 2-o'rinni eng ko'p taklif qilganlar oladi.
+   • 3-o'rinni tasodifiy tanlaymiz.
+"""
 
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("📊 Mening hisobim", "🏆 Top 10")
