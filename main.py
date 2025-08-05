@@ -413,8 +413,7 @@ async def show_code_stat(message: types.Message, state: FSMContext):
 
     await message.answer(
         f"📊 <b>{code} statistikasi:</b>\n"
-        f"🔍 Qidirilgan: <b>{stat['searched']}</b>\n"
-        f"👁 Ko‘rilgan: <b>{stat['viewed']}</b>",
+        f"🔍 Qidirilgan: <b>{stat['searched']}</b>\n",
         parse_mode="HTML"
     )
 
@@ -469,7 +468,6 @@ async def handle_code_message(message: types.Message):
         await increment_stat(code, "init")
         await increment_stat(code, "searched")
         await send_reklama_post(message.from_user.id, code)
-        await increment_stat(code, "viewed")
 
 # === 📢 Habar yuborish
 @dp.message_handler(lambda m: m.text == "📢 Habar yuborish")
