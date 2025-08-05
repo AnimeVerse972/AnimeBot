@@ -594,7 +594,6 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     rows = message.text.strip().split("\n")
     successful = 0
     failed = 0
-
     for row in rows:
         parts = row.strip().split()
         if len(parts) < 5:
@@ -611,42 +610,27 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         reklama_id = int(reklama_id)
         post_count = int(post_count)
 
-        # Bazaga yozish
         await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
 
-        # Reklama postini MAIN_CHANNELS ga copy qilish
-        for main_ch in MAIN_CHANNELS:
-            try:
+        download_btn = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("📥 Yuklab olish", url=f"https://t.me/{BOT_USERNAME}?start={code}")
+        )
+
+        try:
+            for ch in MAIN_CHANNELS:
                 await bot.copy_message(
-                    chat_id=int(main_ch.strip()),
+                    chat_id=ch,
                     from_chat_id=server_channel,
-                    message_id=reklama_id
-                )
-            except Exception as e:
-                print(f"Reklama yuborishda xatolik: {e}")
+                        message_id=reklama_id,
+                reply_markup=download_btn
+        ) 
+            successful += 1
+        except:
+            failed += 1
 
-        # Anime postlarini CHANNEL_USERNAMES ga copy qilish
-        for i in range(1, post_count + 1):
-            for ch in CHANNEL_USERNAMES:
-                try:
-                    await bot.copy_message(
-                        chat_id=ch.strip(),
-                        from_chat_id=server_channel,
-                        message_id=reklama_id + i
-                    )
-                except Exception as e:
-                    print(f"Post yuborishda xatolik: {e}")
-
-        successful += 1
-
-    await message.answer(
-        f"✅ Yangi kodlar qo‘shildi va copy qilindi:\n"
-        f"✅ Muvaffaqiyatli: {successful}\n"
-        f"❌ Xatolik: {failed}"
-    )
-
+    await message.answer(f"✅ Yangi kodlar qo‘shildi:\n\n✅ Muvaffaqiyatli: {successful}\n❌ Xatolik: {failed}")
     await state.finish()
-
+    
 # === Kodlar ro‘yxati
 @dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
 async def kodlar(message: types.Message):
