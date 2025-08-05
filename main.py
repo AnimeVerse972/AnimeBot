@@ -593,26 +593,56 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     rows = message.text.strip().split("\n")
     successful = 0
     failed = 0
+
     for row in rows:
         parts = row.strip().split()
         if len(parts) < 5:
             failed += 1
             continue
+
         code, server_channel, reklama_id, post_count = parts[:4]
         title = " ".join(parts[4:])
+
         if not (code.isdigit() and reklama_id.isdigit() and post_count.isdigit()):
             failed += 1
             continue
+
         reklama_id = int(reklama_id)
         post_count = int(post_count)
 
-        # Faqat ma'lumotlarni bazaga qo'shamiz
+        # Bazaga yozish
         await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
-        successful += 1  # muvaffaqiyatli bo'lganlar hisoblanmoqda
 
-    await message.answer(f"""✅ Yangi kodlar qo‘shildi:
-✅ Muvaffaqiyatli: {successful}
-❌ Xatolik: {failed}""")
+        # Reklama postini MAIN_CHANNELS ga copy qilish
+        for main_ch in MAIN_CHANNELS:
+            try:
+                await bot.copy_message(
+                    chat_id=int(main_ch.strip()),
+                    from_chat_id=server_channel,
+                    message_id=reklama_id
+                )
+            except Exception as e:
+                print(f"Reklama yuborishda xatolik: {e}")
+
+        # Anime postlarini CHANNEL_USERNAMES ga copy qilish
+        for i in range(1, post_count + 1):
+            for ch in CHANNEL_USERNAMES:
+                try:
+                    await bot.copy_message(
+                        chat_id=ch.strip(),
+                        from_chat_id=server_channel,
+                        message_id=reklama_id + i
+                    )
+                except Exception as e:
+                    print(f"Post yuborishda xatolik: {e}")
+
+        successful += 1
+
+    await message.answer(
+        f"✅ Yangi kodlar qo‘shildi va copy qilindi:\n"
+        f"✅ Muvaffaqiyatli: {successful}\n"
+        f"❌ Xatolik: {failed}"
+    )
 
     await state.finish()
 
