@@ -76,6 +76,10 @@ class PostStates(StatesGroup):
     waiting_for_title = State()
     waiting_for_link = State()
 
+class ContestStates(StatesGroup):
+    waiting_for_contest_text = State()
+    waiting_for_contest_photo = State()
+    
 async def get_unsubscribed_channels(user_id):
     unsubscribed = []
     for channel in CHANNELS:
@@ -116,10 +120,10 @@ async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
     args = message.get_args()
 
+    # Referral orqali taklif qilindi
     if args and args.isdigit():
         code = args
         await increment_stat(code, "init")
-        await increment_stat(code, "searched")
 
         unsubscribed = await get_unsubscribed_channels(message.from_user.id)
         if unsubscribed:
@@ -130,26 +134,33 @@ async def start_handler(message: types.Message):
             )
         else:
             await send_reklama_post(message.from_user.id, code)
-            await increment_stat(code, "searched")
+            await increment_stat(code, "viewed")  # To'g'ri: ko'rilganda viewed oshiriladi
         return
 
+    # Foydalanuvchiga tugmalar
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+
+    # Konkurs faqat joriy bo'lsa ko'rsatiladi
+    active_contest = await get_active_contest()
+    if active_contest:
+        kb.add("🎯 Konkurs")
+
     if message.from_user.id in ADMINS:
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
         kb.add("📊 Statistika", "📈 Kod statistikasi")
         kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
         kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-        kb.add("➕ Admin qo‘shish")
+        kb.add("➕ Admin qo‘shish", "🎯 Konkurs")
         kb.add("📥 User qo‘shish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
-        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         kb.add(
             KeyboardButton("🎞 Barcha animelar"),
             KeyboardButton("✉️ Admin bilan bog‘lanish")
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+        
 
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
@@ -235,6 +246,133 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
         await message.answer(f"❌ Xatolik: {e}")
     finally:
         await state.finish()
+
+@dp.message_handler(lambda m: m.text == "🎯 Konkurs", user_id=ADMINS)
+async def contest_menu(message: types.Message):
+    active = await get_active_contest()
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(InlineKeyboardButton("🆕 Konkursni boshlash", callback_data="start_contest"))
+    if active:
+        kb.add(InlineKeyboardButton("🛑 Konkursni tugatish", callback_data="finish_contest"))
+    await message.answer("🎯 Konkurs boshqaruvi:", reply_markup=kb)
+
+@dp.callback_query_handler(lambda c: c.data == "start_contest", user_id=ADMINS)
+async def start_contest_prompt(callback: CallbackQuery):
+    await ContestStates.waiting_for_contest_text.set()
+    await callback.message.answer("📝 Konkurs uchun matnni yuboring:")
+    await callback.answer()
+
+@dp.callback_query_handler(lambda c: c.data == "finish_contest", user_id=ADMINS)
+async def finish_contest_now(callback: CallbackQuery):
+    success = await finish_contest()
+    if success:
+        await callback.message.answer("✅ Konkurs tugatildi. Barcha qatnashuvchilar ma'lumotlari o'chirildi.")
+    else:
+        await callback.message.answer("❌ Aktiv konkurs topilmadi.")
+    await callback.answer()
+
+@dp.message_handler(state=ContestStates.waiting_for_contest_text, user_id=ADMINS)
+async def get_contest_text(message: types.Message, state: FSMContext):
+    await state.update_data(text=message.text)
+    await ContestStates.next()
+    await message.answer("🖼 Endi rasm yuboring:")
+
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=ContestStates.waiting_for_contest_photo, user_id=ADMINS)
+async def get_contest_photo(message: types.Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id
+    data = await state.get_data()
+    text = data['text']
+
+    await start_contest(text, photo_id)
+
+    kb = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("🎉 Qatnashish", callback_data="join_contest")
+    )
+
+    for channel in CHANNELS:
+        try:
+            chat = await bot.get_chat(channel.strip())
+            invite_link = chat.invite_link or (await chat.export_invite_link())
+            kb.add(InlineKeyboardButton(f"🔔 {chat.title}", url=invite_link))
+        except Exception as e:
+            print(f"Kanal link xato: {e}")
+
+    for main_ch in MAIN_CHANNELS:
+        try:
+            chat = await bot.get_chat(main_ch.strip())
+            invite_link = chat.invite_link or (await chat.export_invite_link())
+            kb.add(InlineKeyboardButton(f"🏆 Asosiy kanal", url=invite_link))
+        except Exception as e:
+            print(f"Asosiy kanal xato: {e}")
+
+    for ch in CHANNELS + MAIN_CHANNELS:
+        try:
+            await bot.send_photo(
+                chat_id=ch.strip(),
+                photo=photo_id,
+                caption=text,
+                reply_markup=kb
+            )
+        except Exception as e:
+            print(f"Kanalga yuborishda xato: {ch} -> {e}")
+
+    await message.answer("✅ Konkurs barcha kanallarga yuborildi!")
+    await state.finish()
+
+@dp.callback_query_handler(lambda c: c.data == "join_contest")
+async def join_contest_handler(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    await add_contest_participant(user_id)
+
+    rules = (
+        "📜 *Qatnashish shartlari:*
+"
+        "1. Yuqoridagi barcha kanallarga obuna bo'ling.
+"
+        "2. Do'stlaringizni taklif qiling — har biri uchun 1 ball.
+"
+        "3. G'oliblar:
+"
+        "   • 1-va 2-o'rinni eng ko'p taklif qilganlar oladi.
+"
+        "   • 3-o'rinni tasodifiy tanlaymiz.
+"
+    )
+
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📊 Mening hisobim", "🏆 Top 10")
+    kb.add("📤 Do'stlarni taklif qilish")
+
+    await callback.message.answer(rules, parse_mode="Markdown", reply_markup=kb)
+    await callback.answer("🎉 Siz konkursda qatnashdingiz!")
+
+@dp.message_handler(lambda m: m.text == "📤 Do'stlarni taklif qilish")
+async def invite_friends(message: types.Message):
+    link = f"https://t.me/{BOT_USERNAME}?start={message.from_user.id}"
+    await message.answer(
+        f"🔗 Do'stlaringizni ushbu havola orqali taklif qiling:
+{link}",
+        disable_web_page_preview=True
+    )
+
+@dp.message_handler(lambda m: m.text == "📊 Mening hisobim")
+async def my_stats(message: types.Message):
+    referrals = await get_user_referrals(message.from_user.id)
+    await message.answer(f"👥 Siz {referrals} kishi taklif qildingiz.")
+
+@dp.message_handler(lambda m: m.text == "🏆 Top 10")
+async def top_10(message: types.Message):
+    top = await get_top_participants(10)
+    if not top:
+        await message.answer("Hali hech kim qatnashmagan.")
+        return
+    text = "🏆 *TOP 10 gacha taklif qilganlar:*
+"
+    for i, p in enumerate(top, 1):
+        text += f"{i}. 👤 `{p['user_id']}` — {p['referrals']} ta
+"
+    await message.answer(text, parse_mode="Markdown")
+
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
