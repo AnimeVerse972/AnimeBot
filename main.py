@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from konkurs import register_konkurs_handlers
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import (
@@ -140,7 +141,7 @@ async def start_handler(message: types.Message):
         kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
         kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-        kb.add("➕ Admin qo‘shish")
+        kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
         kb.add("📥 User qo‘shish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
@@ -733,7 +734,9 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
 
 async def on_startup(dp):
     await init_db()
+    register_konkurs_handlers(dp, bot, ADMINS)
     print("✅ PostgreSQL bazaga ulandi!")
+
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)    
