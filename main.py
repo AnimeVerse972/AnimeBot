@@ -324,7 +324,7 @@ async def join_contest_handler(callback: CallbackQuery):
     user_id = callback.from_user.id
     await add_contest_participant(user_id)
 
-     rules = """📜 *Qatnashish shartlari:*
+    rules = """📜 *Qatnashish shartlari:*
 1. Yuqoridagi barcha kanallarga obuna bo'ling.
 2. Do'stlaringizni taklif qiling — har biri uchun 1 ball.
 3. G'oliblar:
@@ -337,7 +337,8 @@ async def join_contest_handler(callback: CallbackQuery):
     kb.add("📤 Do'stlarni taklif qilish")
 
     await callback.message.answer(rules, parse_mode="Markdown", reply_markup=kb)
-    await callback.answer("🎉 Siz konkursda qatnashdingiz!")
+    await callback.answer("🎉 Siz konkursda qatnashuvchisiga aylandingiz!")
+
 
 @dp.message_handler(lambda m: m.text == "📤 Do'stlarni taklif qilish")
 async def invite_friends(message: types.Message):
