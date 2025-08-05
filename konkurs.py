@@ -86,42 +86,9 @@ def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
         await message.answer("🏆 Konkurs boshqaruvi:", reply_markup=kb)
 
     # --- ▶️ Konkursni boshlash (reply tugma)
-    @dp.message_handler(lambda m: ("konkursni boshlash" in _norm(m.text)) and m.from_user and m.from_user.id in ADMINS)
-    async def start_contest(message: types.Message, state_ctx: FSMContext):
-        st = _load_state()
-        if st["active"]:
-            await message.answer("ℹ️ Konkurs allaqachon boshlangan.")
-            return
-
-        st["active"] = True
-        st["participants"] = []
-        st["winners"] = []
-        st["post_message"] = (
-            "🎉 *Konkurs boshlandi!*\n\n"
-            "Ishtirok etish uchun quyidagi tugmani bosing."
-        )
-        _save_state(st)
-
-        # Kanallarga e'lon
-        if not MAIN_CHANNELS:
-            await message.answer("⚠️ MAIN_CHANNELS topilmadi. .env faylni tekshiring.")
-        else:
-            for ch in MAIN_CHANNELS:
-                try:
-                    await bot.send_message(
-                        chat_id=_as_chat_id(ch),
-                        text=st["post_message"],
-                        reply_markup=_join_kb(),
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    print(f"[KONKURS] E’lon yuborishda xatolik: {ch} -> {e}")
-
-        kb = _admin_menu_kb_contest(True, 0)
-        await message.answer(
-            "✅ Konkurs boshlandi!\nIshtirokchilar endi '✅ Ishtirok etish' tugmasi orqali qo‘shila oladi.",
-            reply_markup=kb
-        )
+    @dp.message_handler(lambda m: m.text.startswith("▶️ Konkursni boshlash"), user_id=ADMINS)
+    async def start_contest_test(message: types.Message):
+    await message.answer("✅ Konkurs start ishladi!")
 
     # --- Callback: Ishtirok etish
     @dp.callback_query_handler(lambda c: c.data == "contest_join")
