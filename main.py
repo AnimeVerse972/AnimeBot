@@ -2,13 +2,14 @@ import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher import FSMContext, filters
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 )
 from aiogram.utils import executor
+
 from keep_alive import keep_alive
 from database import (
     init_db,
@@ -24,31 +25,30 @@ from database import (
     update_anime_code
 )
 
+# === ENV / STARTUP ===
 load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CHANNELS = os.getenv("CHANNEL_USERNAMES").split(",")
-MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
-BOT_USERNAME = os.getenv("BOT_USERNAME")
+if not API_TOKEN:
+    raise RuntimeError("API_TOKEN topilmadi")
 
-bot = Bot(token=API_TOKEN)
+def _split_env_list(name: str):
+    v = os.getenv(name, "")
+    return [s.strip() for s in v.split(",") if s.strip()]
+
+CHANNELS = _split_env_list("CHANNEL_USERNAMES")
+MAIN_CHANNELS = _split_env_list("MAIN_CHANNELS")  # kerak bo'lsa, ishlatishingiz mumkin
+BOT_USERNAME = os.getenv("BOT_USERNAME", "")
+
+bot = Bot(token=API_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-async def make_subscribe_markup(code):
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for channel in CHANNELS:
-        try:
-            invite_link = await bot.create_chat_invite_link(channel.strip())
-            keyboard.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=invite_link.invite_link))
-        except Exception as e:
-            print(f"❌ Link yaratishda xatolik: {channel} -> {e}")
-    keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
-    return keyboard
-
+# Adminlar
 ADMINS = {6486825926, 7711928526}
 
+# --- Holatlar ---
 class AdminStates(StatesGroup):
     waiting_for_kino_data = State()
     waiting_for_delete_code = State()
@@ -64,75 +64,80 @@ class EditCode(StatesGroup):
     WaitingForOldCode = State()
     WaitingForNewCode = State()
     WaitingForNewTitle = State()
-    
+
 class UserStates(StatesGroup):
     waiting_for_admin_message = State()
 
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
-    
+
 class PostStates(StatesGroup):
     waiting_for_image = State()
     waiting_for_title = State()
     waiting_for_link = State()
 
-async def get_unsubscribed_channels(user_id):
-    unsubscribed = []
-    for channel in CHANNELS:
-        try:
-            member = await bot.get_chat_member(channel.strip(), user_id)
-            if member.status not in ["member", "administrator", "creator"]:
-                unsubscribed.append(channel)
-        except Exception as e:
-            print(f"❗ Obuna tekshirishda xatolik: {channel} -> {e}")
-            unsubscribed.append(channel)
-    return unsubscribed
+# === Helper: faqat adminlar ===
+def admin_filter(message: types.Message):
+    return message.from_user and message.from_user.id in ADMINS
 
-async def is_user_subscribed(user_id):
-    for channel in CHANNELS:
-        try:
-            member = await bot.get_chat_member(channel.strip(), user_id)
-            if member.status not in ["member", "administrator", "creator"]:
-                return False
-        except Exception as e:
-            print(f"❗ Obuna holatini aniqlab bo‘lmadi: {channel} -> {e}")
-            return False
-    return True
-    
-async def make_full_subscribe_markup(code):
-    markup = InlineKeyboardMarkup(row_width=1)
+# === Helper: obunani tekshirish va markup ===
+async def get_unsubscribed_channels(user_id: int):
+    unsub = []
     for ch in CHANNELS:
         try:
-            channel = await bot.get_chat(ch.strip())
-            invite_link = channel.invite_link or (await channel.export_invite_link())
-            markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
+            m = await bot.get_chat_member(ch, user_id)
+            if m.status not in ("member", "administrator", "creator"):
+                unsub.append(ch)
         except Exception as e:
-            print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
-    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
-    return markup
+            # Agar chat private yoki bot admin emas bo'lsa, foydalanuvchi obuna deb hisoblanmasin
+            print(f"❗ Obuna tekshirishda xatolik: {ch} -> {e}")
+            unsub.append(ch)
+    return unsub
 
+async def is_user_subscribed(user_id: int) -> bool:
+    unsub = await get_unsubscribed_channels(user_id)
+    return len(unsub) == 0
+
+async def _safe_invite_link_for(ch: str) -> str:
+    """
+    Har safar yangi link yaratmaslikka harakat:
+    - Agar chat public bo'lsa, @username ishlaydi (t.me/username).
+    - Agar private bo'lsa:
+        1) chat.invite_link bo'lsa o'shani
+        2) bo'lmasa export_invite_link()
+    """
+    try:
+        chat = await bot.get_chat(ch)
+        if chat.username:
+            return f"https://t.me/{chat.username}"
+        if chat.invite_link:
+            return chat.invite_link
+        # Agar invite_link yo'q bo'lsa, export qilib olamiz:
+        link = await bot.export_chat_invite_link(chat.id)
+        return link
+    except Exception as e:
+        print(f"❗ Link olishda xatolik: {ch} -> {e}")
+        # Fallback: t.me/username bo'lmasa ham foydalanuvchiga ko'rsatamiz
+        return f"https://t.me/{ch.lstrip('@')}"
+
+def make_check_button(cb: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton("✅ Tekshirish", callback_data=cb)
+
+async def make_subscribe_markup(code: str) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    for ch in CHANNELS:
+        url = await _safe_invite_link_for(ch)
+        kb.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=url))
+    kb.add(make_check_button(f"checksub:{code}"))
+    return kb
+
+# === /start ===
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
     args = message.get_args()
 
-    if args and args.isdigit():
-        code = args
-        await increment_stat(code, "init")
-        await increment_stat(code, "searched")
-
-        unsubscribed = await get_unsubscribed_channels(message.from_user.id)
-        if unsubscribed:
-            markup = await make_full_subscribe_markup(code)
-            await message.answer(
-                "❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:",
-                reply_markup=markup
-            )
-        else:
-            await send_reklama_post(message.from_user.id, code)
-            await increment_stat(code, "searched")
-        return
-
+    # Admin panel yoki foydalanuvchi menyusi
     if message.from_user.id in ADMINS:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
@@ -142,6 +147,7 @@ async def start_handler(message: types.Message):
         kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
         kb.add("➕ Admin qo‘shish")
         kb.add("📥 User qo‘shish")
+        # Agar /start ga param kelsa, uni ham ishlaymiz (pastda)
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -151,27 +157,43 @@ async def start_handler(message: types.Message):
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
 
+    # Agar /start 123 kabi kelgan bo'lsa — shu yerda ishlaymiz
+    if args and args.isdigit():
+        code = args
+        # searched faqat bir marta — /start param bilan keldi
+        await increment_stat(code, "searched")
+
+        if not await is_user_subscribed(message.from_user.id):
+            markup = await make_subscribe_markup(code)
+            await message.answer(
+                "❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:",
+                reply_markup=markup
+            )
+        else:
+            await send_reklama_post(message.from_user.id, code)
+
+# === Obuna tekshirish: yagona callback ===
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
     code = call.data.split(":")[1]
-    unsubscribed = await get_unsubscribed_channels(call.from_user.id)
+    unsub = await get_unsubscribed_channels(call.from_user.id)
 
-    if unsubscribed:
-        markup = InlineKeyboardMarkup(row_width=1)
-        for ch in unsubscribed:
-            try:
-                channel = await bot.get_chat(ch.strip())
-                invite_link = channel.invite_link or (await channel.export_invite_link())
-                markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
-            except Exception as e:
-                print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
-        markup.add(InlineKeyboardButton("✅ Yana tekshirish", callback_data=f"checksub:{code}"))
-        await call.message.edit_text("❗ Obuna bo‘lmagan kanal(lar):", reply_markup=markup)
+    if unsub:
+        kb = InlineKeyboardMarkup(row_width=1)
+        for ch in unsub:
+            url = await _safe_invite_link_for(ch)
+            kb.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=url))
+        kb.add(make_check_button(f"checksub:{code}"))
+        await call.message.edit_text("❗ Hali ham barcha kanallarga obuna bo‘lmagansiz. Iltimos, barchasiga obuna bo‘ling:", reply_markup=kb)
     else:
-        await call.message.delete()
+        try:
+            await call.message.delete()
+        except:
+            pass
         await send_reklama_post(call.from_user.id, code)
-        await increment_stat(code, "searched")
-        
+    await call.answer()
+
+# === Foydalanuvchi menyulari ===
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
     kodlar = await get_all_codes()
@@ -179,12 +201,17 @@ async def show_all_animes(message: types.Message):
         await message.answer("⛔️ Hozircha animelar yoʻq.")
         return
 
-    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))  # raqam bo‘yicha tartib
-    text = "📄 *Barcha animelar:*\n\n"
-    for row in kodlar:
-        text += f"`{row['code']}` – *{row['title']}*\n"
+    # raqam bo‘yicha tartib: raqam bo'lmagan bo'lsa, oxirida qolsin
+    def _sort_key(x):
+        c = str(x.get("code", "")).strip()
+        return (0, int(c)) if c.isdigit() else (1, c)
 
-    await message.answer(text, parse_mode="Markdown")
+    kodlar = sorted(kodlar, key=_sort_key)
+    text = "📄 <b>Barcha animelar:</b>\n\n"
+    for row in kodlar:
+        text += f"<code>{row['code']}</code> – <b>{row['title']}</b>\n"
+
+    await message.answer(text)
 
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
 async def contact_admin(message: types.Message):
@@ -195,20 +222,16 @@ async def contact_admin(message: types.Message):
 async def forward_to_admins(message: types.Message, state: FSMContext):
     await state.finish()
     user = message.from_user
+    kb = InlineKeyboardMarkup().add(InlineKeyboardButton("✉️ Javob yozish", callback_data=f"reply_user:{user.id}"))
 
     for admin_id in ADMINS:
         try:
-            keyboard = InlineKeyboardMarkup().add(
-                InlineKeyboardButton("✉️ Javob yozish", callback_data=f"reply_user:{user.id}")
-            )
-
             await bot.send_message(
                 admin_id,
                 f"📩 <b>Yangi xabar:</b>\n\n"
                 f"<b>👤 Foydalanuvchi:</b> {user.full_name} | <code>{user.id}</code>\n"
                 f"<b>💬 Xabar:</b> {message.text}",
-                parse_mode="HTML",
-                reply_markup=keyboard
+                reply_markup=kb
             )
         except Exception as e:
             print(f"Adminga yuborishda xatolik: {e}")
@@ -249,75 +272,58 @@ async def qollanma(message: types.Message):
     )
     await message.answer("📘 Qanday yordam kerak?", reply_markup=kb)
 
-
-# ==== MATNLAR ====
 HELP_TEXTS = {
     "help_add": (
-        "📥 *Anime qo‘shish*\n\n"
-        "`KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\n\n"
-        "Misol: `91 @MyKino 4 12 Naruto`\n\n"
-        "• *Kod* – foydalanuvchi yozadigan raqam\n"
-        "• *@kanal* – server kanal username\n"
-        "• *REKLAMA_ID* – post ID raqami (raqam)\n"
-        "• *POST_SONI* – nechta qism borligi\n"
-        "• *ANIME_NOMI* – ko‘rsatiladigan sarlavha\n\n"
-        "📩 Endi formatda xabar yuboring:"
+        "📥 <b>Anime qo‘shish</b>\n\n"
+        "<code>KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI</code>\n\n"
+        "Misol: <code>91 @MyKino 4 12 Naruto</code>\n\n"
+        "• <b>Kod</b> – foydalanuvchi yozadigan raqam\n"
+        "• <b>@kanal</b> – server kanal username\n"
+        "• <b>REKLAMA_ID</b> – post ID raqami (raqam)\n"
+        "• <b>POST_SONI</b> – nechta qism borligi\n"
+        "• <b>ANIME_NOMI</b> – ko‘rsatiladigan sarlavha\n\n"
+        "📩 Endi shu formatda xabar yuboring:"
     ),
     "help_channel": (
-        "📡 *Kanal yaratish*\n\n"
-        "1. 2 ta kanal yarating:\n"
-        "   • *Server kanal* – post saqlanadi\n"
-        "   • *Reklama kanal* – bot ulashadi\n\n"
-        "2. Har ikkasiga botni admin qiling\n\n"
-        "3. Kanalni public (@username) qiling"
+        "📡 <b>Kanal yaratish</b>\n\n"
+        "1) 2 ta kanal yarating: Server va Reklama\n"
+        "2) Har ikkisiga botni admin qiling\n"
+        "3) Kanalni public (@username) qiling yoki invite link bering"
     ),
     "help_id": (
-        "🆔 *Reklama ID olish*\n\n"
-        "1. Server kanalga post joylang\n\n"
-        "2. Post ustiga bosing → *Share* → *Copy link*\n\n"
-        "3. Link oxiridagi sonni oling\n\n"
-        "Misol: `t.me/MyKino/4` → ID = `4`"
+        "🆔 <b>Reklama ID olish</b>\n\n"
+        "1) Server kanalga post joylang\n"
+        "2) Post → Share → Copy link\n"
+        "3) Link oxiridagi son ID bo'ladi (masalan: t.me/MyKino/4 → ID=4)"
     ),
     "help_code": (
-        "🔁 *Kod ishlashi*\n\n"
-        "1. Foydalanuvchi kod yozadi (masalan: `91`)\n\n"
-        "2. Obuna tekshiriladi → reklama post yuboriladi\n\n"
-        "3. Tugmalar orqali qismlarni ochadi"
+        "🔁 <b>Kod ishlashi</b>\n\n"
+        "1) Foydalanuvchi kod yozadi (masalan: <code>91</code>)\n"
+        "2) Obuna tekshiriladi → reklama post yuboriladi\n"
+        "3) Tugmalar orqali qismlarni ochadi"
     ),
     "help_faq": (
-        "❓ *Tez-tez so‘raladigan savollar*\n\n"
-        "• *Kodni qanday ulashaman?*\n"
-        "  `https://t.me/<BOT_USERNAME>?start=91`\n\n"
-        "• *Har safar yangi kanal kerakmi?*\n"
-        "  – Yo‘q, bitta server kanal yetarli\n\n"
-        "• *Kodni tahrirlash/o‘chirish mumkinmi?*\n"
-        "  – Ha, admin menyuda ✏️ / ❌ tugmalari bor"
-    )
+        "❓ <b>Tez-tez so‘raladigan savollar</b>\n\n"
+        "• Kod ulashish: <code>https://t.me/{BOT}?start=91</code>\n"
+        "• Har safar yangi kanal kerakmi? — Yo‘q\n"
+        "• Tahrirlash/o‘chirish — Admin menyudan"
+    ).replace("{BOT}", BOT_USERNAME or "YourBot")
 }
 
-
-# ==== CALLBACK: HAR BIR YORDAM SAHIFASI ====
 @dp.callback_query_handler(lambda c: c.data.startswith("help_"))
 async def show_help_page(callback: types.CallbackQuery):
     key = callback.data
     text = HELP_TEXTS.get(key, "❌ Ma'lumot topilmadi.")
-    
-    # Ortga tugmasi
-    kb = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("⬅️ Ortga", callback_data="back_help")
-    )
-    
+    kb = InlineKeyboardMarkup().add(InlineKeyboardButton("⬅️ Ortga", callback_data="back_help"))
     try:
-        await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
-    except Exception as e:
-        # Agar matn o'zgartirilmayotgan bo'lsa (masalan, rasmli xabar bo'lsa)
-        await callback.message.answer(text, parse_mode="Markdown", reply_markup=kb)
-        await callback.message.delete()  # Eski xabarni o'chirish
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb)
+        with contextlib.suppress(Exception):
+            await callback.message.delete()
     finally:
         await callback.answer()
 
-
-# ==== ORTGA TUGMASI ====
 @dp.callback_query_handler(lambda c: c.data == "back_help")
 async def back_to_qollanma(callback: types.CallbackQuery):
     kb = (
@@ -328,31 +334,29 @@ async def back_to_qollanma(callback: types.CallbackQuery):
         .add(InlineKeyboardButton("🔁 4. Kod ishlashi", callback_data="help_code"))
         .add(InlineKeyboardButton("❓ 5. Savol-javob", callback_data="help_faq"))
     )
-    
     try:
         await callback.message.edit_text("📘 Qanday yordam kerak?", reply_markup=kb)
-    except Exception as e:
+    except Exception:
         await callback.message.answer("📘 Qanday yordam kerak?", reply_markup=kb)
-        await callback.message.delete()
+        with contextlib.suppress(Exception):
+            await callback.message.delete()
     finally:
         await callback.answer()
 
-@dp.message_handler(lambda m: m.text == "📥 User qo‘shish", user_id=ADMINS)
+# === User qo'shish (admin)
+@dp.message_handler(lambda m: m.text == "📥 User qo‘shish", func=admin_filter)
 async def add_users_start(message: types.Message):
     await AdminStates.waiting_for_user_list.set()
     await message.answer("📋 Foydalanuvchi ID ro‘yxatini yuboring (har bir qatorda bitta ID yoki vergul bilan):")
-@dp.message_handler(state=AdminStates.waiting_for_user_list, user_id=ADMINS)
+
+@dp.message_handler(state=AdminStates.waiting_for_user_list, func=admin_filter)
 async def add_users_process(message: types.Message, state: FSMContext):
     await state.finish()
-    text = message.text.strip()
-
-    # Har bir qatordagi yoki vergul bilan ajratilgan ID larni ajratish
-    raw_ids = text.replace(",", "\n").split("\n")
+    raw_ids = message.text.replace(",", "\n").split("\n")
     user_ids = [i.strip() for i in raw_ids if i.strip().isdigit()]
 
     added = 0
     errors = 0
-
     for uid in user_ids:
         try:
             await add_user(int(uid))
@@ -363,17 +367,16 @@ async def add_users_process(message: types.Message, state: FSMContext):
 
     await message.answer(f"✅ Qo‘shildi: {added} ta\n❌ Xato: {errors} ta")
 
-# === Admin qo'shish===
-@dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
+# === Admin qo'shish
+@dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", func=admin_filter)
 async def add_admin_start(message: types.Message):
     await message.answer("🆔 Yangi adminning Telegram ID raqamini yuboring.")
     await AdminStates.waiting_for_admin_id.set()
 
-@dp.message_handler(state=AdminStates.waiting_for_admin_id, user_id=ADMINS)
+@dp.message_handler(state=AdminStates.waiting_for_admin_id, func=admin_filter)
 async def add_admin_process(message: types.Message, state: FSMContext):
     await state.finish()
     text = message.text.strip()
-    
     if not text.isdigit():
         await message.answer("❗ Faqat raqam yuboring (Telegram user ID).")
         return
@@ -384,22 +387,17 @@ async def add_admin_process(message: types.Message, state: FSMContext):
         return
 
     ADMINS.add(new_admin_id)
-    await message.answer(f"✅ <code>{new_admin_id}</code> admin sifatida qo‘shildi.", parse_mode="HTML")
-
-    try:
+    await message.answer(f"✅ <code>{new_admin_id}</code> admin sifatida qo‘shildi.")
+    with contextlib.suppress(Exception):
         await bot.send_message(new_admin_id, "✅ Siz botga admin sifatida qo‘shildingiz.")
-    except:
-        await message.answer("⚠️ Yangi adminga habar yuborib bo‘lmadi.")
 
 # === Kod statistikasi
-@dp.message_handler(lambda m: m.text == "📈 Kod statistikasi")
+@dp.message_handler(lambda m: m.text == "📈 Kod statistikasi", func=admin_filter)
 async def ask_stat_code(message: types.Message):
-    if message.from_user.id not in ADMINS:
-        return
     await message.answer("📥 Kod raqamini yuboring:")
     await AdminStates.waiting_for_stat_code.set()
 
-@dp.message_handler(state=AdminStates.waiting_for_stat_code)
+@dp.message_handler(state=AdminStates.waiting_for_stat_code, func=admin_filter)
 async def show_code_stat(message: types.Message, state: FSMContext):
     await state.finish()
     code = message.text.strip()
@@ -413,18 +411,17 @@ async def show_code_stat(message: types.Message, state: FSMContext):
 
     await message.answer(
         f"📊 <b>{code} statistikasi:</b>\n"
-        f"🔍 Qidirilgan: <b>{stat['searched']}</b>\n"
-        f"👁 Ko‘rilgan: <b>{stat['viewed']}</b>",
-        parse_mode="HTML"
+        f"🔍 Qidirilgan: <b>{stat.get('searched', 0)}</b>"
+        # 'viewed' ataylab olib tashlandi — endi ko'rsatilmaydi
     )
 
-@dp.message_handler(lambda message: message.text == "✏️ Kodni tahrirlash", user_id=ADMINS)
+# === Kodni tahrirlash
+@dp.message_handler(lambda m: m.text == "✏️ Kodni tahrirlash", func=admin_filter)
 async def edit_code_start(message: types.Message):
     await message.answer("Qaysi kodni tahrirlashni xohlaysiz? (eski kodni yuboring)")
     await EditCode.WaitingForOldCode.set()
 
-# --- Eski kodni qabul qilish ---
-@dp.message_handler(state=EditCode.WaitingForOldCode, user_id=ADMINS)
+@dp.message_handler(state=EditCode.WaitingForOldCode, func=admin_filter)
 async def get_old_code(message: types.Message, state: FSMContext):
     code = message.text.strip()
     post = await get_kino_by_code(code)
@@ -435,15 +432,13 @@ async def get_old_code(message: types.Message, state: FSMContext):
     await message.answer(f"🔎 Kod: {code}\n📌 Nomi: {post['title']}\n\nYangi kodni yuboring:")
     await EditCode.WaitingForNewCode.set()
 
-# --- Yangi kodni olish ---
-@dp.message_handler(state=EditCode.WaitingForNewCode, user_id=ADMINS)
+@dp.message_handler(state=EditCode.WaitingForNewCode, func=admin_filter)
 async def get_new_code(message: types.Message, state: FSMContext):
     await state.update_data(new_code=message.text.strip())
     await message.answer("Yangi nomini yuboring:")
     await EditCode.WaitingForNewTitle.set()
 
-# --- Yangi nomni olish va yangilash ---
-@dp.message_handler(state=EditCode.WaitingForNewTitle, user_id=ADMINS)
+@dp.message_handler(state=EditCode.WaitingForNewTitle, func=admin_filter)
 async def get_new_title(message: types.Message, state: FSMContext):
     data = await state.get_data()
     try:
@@ -457,34 +452,33 @@ async def get_new_title(message: types.Message, state: FSMContext):
         await message.answer(f"❌ Xatolik yuz berdi:\n{e}")
     finally:
         await state.finish()
-        
-# === Oddiy raqam yuborilganda
-@dp.message_handler(lambda message: message.text.isdigit())
+
+# === Raqam yuborilganda (kod)
+@dp.message_handler(lambda message: message.text and message.text.isdigit())
 async def handle_code_message(message: types.Message):
-    code = message.text
+    code = message.text.strip()
+
     if not await is_user_subscribed(message.from_user.id):
         markup = await make_subscribe_markup(code)
         await message.answer("❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:", reply_markup=markup)
-    else:
-        await increment_stat(code, "init")
-        await increment_stat(code, "searched")
-        await send_reklama_post(message.from_user.id, code)
-        await increment_stat(code, "viewed")
-
-# === 📢 Habar yuborish
-@dp.message_handler(lambda m: m.text == "📢 Habar yuborish")
-async def ask_broadcast_info(message: types.Message):
-    if message.from_user.id not in ADMINS:
         return
-    await AdminStates.waiting_for_broadcast_data.set()
-    await message.answer("📨 Habar yuborish uchun format:\n`@kanal xabar_id`", parse_mode="Markdown")
 
-@dp.message_handler(state=AdminStates.waiting_for_broadcast_data)
+    # searched faqat shu yerda oshadi (kod yozilganda)
+    await increment_stat(code, "searched")
+    await send_reklama_post(message.from_user.id, code)
+
+# === 📢 Habar yuborish (forward)
+@dp.message_handler(lambda m: m.text == "📢 Habar yuborish", func=admin_filter)
+async def ask_broadcast_info(message: types.Message):
+    await AdminStates.waiting_for_broadcast_data.set()
+    await message.answer("📨 Habar yuborish uchun format:\n<code>@kanal xabar_id</code>")
+
+@dp.message_handler(state=AdminStates.waiting_for_broadcast_data, func=admin_filter)
 async def send_forward_only(message: types.Message, state: FSMContext):
     await state.finish()
     parts = message.text.strip().split()
     if len(parts) != 2:
-        await message.answer("❗ Format noto‘g‘ri. Masalan: `@kanalim 123`")
+        await message.answer("❗ Format noto‘g‘ri. Masalan: <code>@kanalim 123</code>")
         return
 
     channel_username, msg_id = parts
@@ -493,18 +487,13 @@ async def send_forward_only(message: types.Message, state: FSMContext):
         return
 
     msg_id = int(msg_id)
-    users = await get_all_user_ids()  # Foydalanuvchilar ro‘yxati
+    users = await get_all_user_ids()
 
     success = 0
     fail = 0
-
     for user_id in users:
         try:
-            await bot.forward_message(
-                chat_id=user_id,
-                from_chat_id=channel_username,
-                message_id=msg_id
-            )
+            await bot.forward_message(chat_id=user_id, from_chat_id=channel_username, message_id=msg_id)
             success += 1
         except Exception as e:
             print(f"Xatolik {user_id} uchun: {e}")
@@ -512,55 +501,27 @@ async def send_forward_only(message: types.Message, state: FSMContext):
 
     await message.answer(f"✅ Yuborildi: {success} ta\n❌ Xatolik: {fail} ta")
 
-# === Obuna tekshirish callback
-@dp.callback_query_handler(lambda c: c.data.startswith("check_sub:"))
-async def check_sub_callback(callback_query: types.CallbackQuery):
-    code = callback_query.data.split(":")[1]
-    user_id = callback_query.from_user.id
-
-    not_subscribed = []
-    buttons = []
-
-    for channel in CHANNELS:
-        try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            if member.status in ['left', 'kicked']:
-                not_subscribed.append(channel)
-                invite_link = await bot.create_chat_invite_link(channel)
-                buttons.append([
-                    InlineKeyboardButton("🔔 Obuna bo‘lish", url=invite_link.invite_link)
-                ])
-        except Exception as e:
-            print(f"❌ Obuna tekshiruv xatosi: {channel} -> {e}")
-            continue
-
-    if not_subscribed:
-        buttons.append([InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        await callback_query.message.edit_text(
-            "❗ Hali ham barcha kanallarga obuna bo‘lmagansiz. Iltimos, barchasiga obuna bo‘ling:",
-            reply_markup=keyboard
-        )
-    else:
-        await callback_query.message.edit_text("✅ Obuna muvaffaqiyatli tekshirildi!")
-        await send_reklama_post(user_id, code)
-
 # === Reklama postni yuborish
-async def send_reklama_post(user_id, code):
+async def send_reklama_post(user_id: int, code: str):
     data = await get_kino_by_code(code)
     if not data:
         await bot.send_message(user_id, "❌ Kod topilmadi.")
         return
 
-    channel, reklama_id, post_count = data["channel"], data["message_id"], data["post_count"]
+    channel = data["channel"]
+    reklama_id = int(data["message_id"])
+    post_count = int(data["post_count"])
 
+    # 1..post_count tugmalar
     buttons = [InlineKeyboardButton(str(i), callback_data=f"kino:{code}:{i}") for i in range(1, post_count + 1)]
     keyboard = InlineKeyboardMarkup(row_width=5)
     keyboard.add(*buttons)
 
     try:
+        # Siz avval bazaga reklama_id+1 qo'shgansiz; copy qilishda to'g'ri postni yuboramiz
         await bot.copy_message(user_id, channel, reklama_id - 1, reply_markup=keyboard)
-    except:
+    except Exception as e:
+        print(f"❌ Reklama copy_message xatosi: {e}")
         await bot.send_message(user_id, "❌ Reklama postni yuborib bo‘lmadi.")
 
 # === Tugma orqali kino yuborish
@@ -572,29 +533,36 @@ async def kino_button(callback: types.CallbackQuery):
     result = await get_kino_by_code(code)
     if not result:
         await callback.message.answer("❌ Kod topilmadi.")
+        await callback.answer()
         return
 
-    channel, base_id, post_count = result["channel"], result["message_id"], result["post_count"]
+    channel = result["channel"]
+    base_id = int(result["message_id"])
+    post_count = int(result["post_count"])
 
-    if number > post_count:
+    if number > post_count or number < 1:
         await callback.answer("❌ Bunday post yo‘q!", show_alert=True)
         return
 
-    await bot.copy_message(callback.from_user.id, channel, base_id + number - 1)
+    try:
+        await bot.copy_message(callback.from_user.id, channel, base_id + number - 1)
+    except Exception as e:
+        print(f"❌ Kino copy_message xatosi: {e}")
+        await callback.message.answer("❌ Postni yuborib bo‘lmadi.")
     await callback.answer()
 
 # === ➕ Anime qo‘shish
-@dp.message_handler(lambda m: m.text == "➕ Anime qo‘shish")
+@dp.message_handler(lambda m: m.text == "➕ Anime qo‘shish", func=admin_filter)
 async def add_start(message: types.Message):
-    if message.from_user.id in ADMINS:
-        await AdminStates.waiting_for_kino_data.set()
-        await message.answer("📝 Format: `KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\nMasalan: `91 @MyKino 4 12 naruto`", parse_mode="Markdown")
+    await AdminStates.waiting_for_kino_data.set()
+    await message.answer("📝 Format: <code>KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI</code>\nMasalan: <code>91 @MyKino 4 12 Naruto</code>")
 
-@dp.message_handler(state=AdminStates.waiting_for_kino_data)
+@dp.message_handler(state=AdminStates.waiting_for_kino_data, func=admin_filter)
 async def add_kino_handler(message: types.Message, state: FSMContext):
     rows = message.text.strip().split("\n")
     successful = 0
     failed = 0
+
     for row in rows:
         parts = row.strip().split()
         if len(parts) < 5:
@@ -605,20 +573,20 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         if not (code.isdigit() and reklama_id.isdigit() and post_count.isdigit()):
             failed += 1
             continue
+
         reklama_id = int(reklama_id)
         post_count = int(post_count)
 
-        # Faqat ma'lumotlarni bazaga qo'shamiz
-        await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
-        successful += 1  # muvaffaqiyatli bo'lganlar hisoblanmoqda
+        # Bazaga saqlaymiz: eski kodingizga mos ravishda reklama_id + 1 qilib saqlaysiz
+        try:
+            await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
+            successful += 1
+        except Exception as e:
+            print(f"❌ add_kino_code xato: {e}")
+            failed += 1
 
-    await message.answer(f"""✅ Yangi kodlar qo‘shildi:
-✅ Muvaffaqiyatli: {successful}
-❌ Xatolik: {failed}""")
-
+    await message.answer(f"✅ Muvaffaqiyatli: {successful}\n❌ Xatolik: {failed}")
     await state.finish()
-
-
 
 # === Kodlar ro‘yxati
 @dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
@@ -628,71 +596,67 @@ async def kodlar(message: types.Message):
         await message.answer("⛔️ Hech qanday kod topilmadi.")
         return
 
-    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
-    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
+    def _sort_key(x):
+        c = str(x.get("code", "")).strip()
+        return (0, int(c)) if c.isdigit() else (1, c)
 
-    text = "📄 *Kodlar ro‘yxati:*\n\n"
+    kodlar = sorted(kodlar, key=_sort_key)
+    text = "📄 <b>Kodlar ro‘yxati:</b>\n\n"
     for row in kodlar:
-        code = row["code"]
-        title = row["title"]
-        text += f"`{code}` - *{title}*\n"
+        text += f"<code>{row['code']}</code> - <b>{row['title']}</b>\n"
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text)
 
+# === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
     kodlar = await get_all_codes()
     foydalanuvchilar = await get_user_count()
     await message.answer(f"📦 Kodlar: {len(kodlar)}\n👥 Foydalanuvchilar: {foydalanuvchilar}")
 
-@dp.message_handler(lambda m: m.text == "📤 Post qilish")
+# === Post qilish (rasm+caption+link)
+@dp.message_handler(lambda m: m.text == "📤 Post qilish", func=admin_filter)
 async def start_post_process(message: types.Message):
-    if message.from_user.id in ADMINS:
-        await PostStates.waiting_for_image.set()
-        await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
-        
-@dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
+    await PostStates.waiting_for_image.set()
+    await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
+
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image, func=admin_filter)
 async def get_post_image(message: types.Message, state: FSMContext):
     photo = message.photo[-1].file_id
     await state.update_data(photo=photo)
     await PostStates.waiting_for_title.set()
     await message.answer("📌 Endi rasm ostiga yoziladigan nomni yuboring.")
-@dp.message_handler(state=PostStates.waiting_for_title)
+
+@dp.message_handler(state=PostStates.waiting_for_title, func=admin_filter)
 async def get_post_title(message: types.Message, state: FSMContext):
     await state.update_data(title=message.text.strip())
     await PostStates.waiting_for_link.set()
     await message.answer("🔗 Yuklab olish uchun havolani yuboring.")
-@dp.message_handler(state=PostStates.waiting_for_link)
+
+@dp.message_handler(state=PostStates.waiting_for_link, func=admin_filter)
 async def get_post_link(message: types.Message, state: FSMContext):
     data = await state.get_data()
     photo = data.get("photo")
     title = data.get("title")
     link = message.text.strip()
 
-    button = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("📥 Yuklab olish", url=link)
-    )
+    button = InlineKeyboardMarkup().add(InlineKeyboardButton("📥 Yuklab olish", url=link))
 
     try:
-        await bot.send_photo(
-            chat_id=message.chat.id,
-            photo=photo,
-            caption=title,
-            reply_markup=button
-        )
+        await bot.send_photo(chat_id=message.chat.id, photo=photo, caption=title, reply_markup=button)
         await message.answer("✅ Post muvaffaqiyatli yuborildi.")
     except Exception as e:
         await message.answer(f"❌ Xatolik yuz berdi: {e}")
     finally:
         await state.finish()
 
-@dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish")
+# === Kodni o‘chirish
+@dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish", func=admin_filter)
 async def ask_delete_code(message: types.Message):
-    if message.from_user.id in ADMINS:
-        await AdminStates.waiting_for_delete_code.set()
-        await message.answer("🗑 Qaysi kodni o‘chirmoqchisiz? Kodni yuboring.")
+    await AdminStates.waiting_for_delete_code.set()
+    await message.answer("🗑 Qaysi kodni o‘chirmoqchisiz? Kodni yuboring.")
 
-@dp.message_handler(state=AdminStates.waiting_for_delete_code)
+@dp.message_handler(state=AdminStates.waiting_for_delete_code, func=admin_filter)
 async def delete_code_handler(message: types.Message, state: FSMContext):
     await state.finish()
     code = message.text.strip()
@@ -705,9 +669,11 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
     else:
         await message.answer("❌ Kod topilmadi yoki o‘chirib bo‘lmadi.")
 
+# === Startup
 async def on_startup(dp):
     await init_db()
     print("✅ PostgreSQL bazaga ulandi!")
 
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)    
+    import contextlib
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
