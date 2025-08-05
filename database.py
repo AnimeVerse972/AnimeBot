@@ -10,13 +10,7 @@ db_pool = None
 # === Foydalanuvchilar jadvali ===
 async def init_db():
     global db_pool
-    db_pool = await asyncpg.create_pool(
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASS"),
-        database=os.getenv("DB_NAME"),
-        host=os.getenv("DB_HOST"),
-        port=int(os.getenv("DB_PORT"))
-    )
+    db_pool = await asyncpg.create_pool(os.getenv("DATABASE_URL"))
 
     async with db_pool.acquire() as conn:
         # Foydalanuvchilar
@@ -46,21 +40,20 @@ async def init_db():
             );
         """)
 
-        # Adminlar jadvali
+        # Adminlar
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 user_id BIGINT PRIMARY KEY
             );
         """)
 
-        # Dastlabki adminlar (o'z IDlaringizni qo'shing)
+        # Dastlabki adminlar
         default_admins = [6486825926, 7711928526]
         for admin_id in default_admins:
             await conn.execute(
                 "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
                 admin_id
             )
-
 
 # === Foydalanuvchi qo'shish ===
 async def add_user(user_id):
