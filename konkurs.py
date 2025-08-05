@@ -70,16 +70,13 @@ def _norm(text: str) -> str:
     return (text or "").strip().lower()
 
 # === MAIN_CHANNELS ni import vaqtida emas, ro'yxatdan o'tkazishda o‘qiymiz ===
-def register_konkurs_handlers(dp, bot, ADMINS):
+def register_konkurs_handlers(dp, bot, ADMINS, MAIN_CHANNELS):
     """
     main.py da:
         from konkurs import register_konkurs_handlers
         ...
         register_konkurs_handlers(dp, bot, ADMINS)
     """
-    # load_dotenv() allaqachon main.py da chaqirilgan bo'ladi
-    env_main_channels = os.getenv("MAIN_CHANNELS", "")
-    MAIN_CHANNELS = [c.strip() for c in env_main_channels.split(",") if c.strip()]
 
     # --- Admin panel: '🏆 Konkurs'
     @dp.message_handler(lambda m: _norm(m.text) == "🏆 konkurs".lower() and m.from_user and m.from_user.id in ADMINS)
