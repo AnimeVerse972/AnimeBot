@@ -54,7 +54,8 @@ class AdminStates(StatesGroup):
     waiting_for_delete_code = State()
     waiting_for_stat_code = State()
     waiting_for_broadcast_data = State()
-    waiting_for_admin_id = State()  # ➕ Admin qo‘shish uchun
+    waiting_for_admin_id = State()
+    waiting_for_user_list = State()
 
 class AdminReplyStates(StatesGroup):
     waiting_for_reply_message = State()
@@ -140,6 +141,7 @@ async def start_handler(message: types.Message):
         kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
         kb.add("➕ Admin qo‘shish")
+        kb.add("📥 User qo‘shish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -334,7 +336,33 @@ async def back_to_qollanma(callback: types.CallbackQuery):
         await callback.message.delete()
     finally:
         await callback.answer()
-    
+
+@dp.message_handler(lambda m: m.text == "📥 User qo‘shish", user_id=ADMINS)
+async def add_users_start(message: types.Message):
+    await AdminStates.waiting_for_user_list.set()
+    await message.answer("📋 Foydalanuvchi ID ro‘yxatini yuboring (har bir qatorda bitta ID yoki vergul bilan):")
+@dp.message_handler(state=AdminStates.waiting_for_user_list, user_id=ADMINS)
+async def add_users_process(message: types.Message, state: FSMContext):
+    await state.finish()
+    text = message.text.strip()
+
+    # Har bir qatordagi yoki vergul bilan ajratilgan ID larni ajratish
+    raw_ids = text.replace(",", "\n").split("\n")
+    user_ids = [i.strip() for i in raw_ids if i.strip().isdigit()]
+
+    added = 0
+    errors = 0
+
+    for uid in user_ids:
+        try:
+            await add_user(int(uid))
+            added += 1
+        except Exception as e:
+            print(f"❌ Xato: {uid} -> {e}")
+            errors += 1
+
+    await message.answer(f"✅ Qo‘shildi: {added} ta\n❌ Xato: {errors} ta")
+
 # === Admin qo'shish===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
 async def add_admin_start(message: types.Message):
