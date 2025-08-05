@@ -1,4 +1,3 @@
-# === IMPORTLAR ===
 import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -25,8 +24,6 @@ from database import (
     update_anime_code
 )
 
-
-# === YUKLAMALAR ===
 load_dotenv()
 keep_alive()
 
@@ -52,9 +49,6 @@ async def make_subscribe_markup(code):
 
 ADMINS = {6486825926, 7711928526}
 
-# === HOLATLAR ===
-
-# Adminlar uchun barcha holatlar
 class AdminStates(StatesGroup):
     waiting_for_kino_data = State()
     waiting_for_delete_code = State()
@@ -62,31 +56,25 @@ class AdminStates(StatesGroup):
     waiting_for_broadcast_data = State()
     waiting_for_admin_id = State()  # ➕ Admin qo‘shish uchun
 
-# Admin reply (javob) uchun holat
 class AdminReplyStates(StatesGroup):
     waiting_for_reply_message = State()
 
-# Kod tahrirlash uchun holatlar
 class EditCode(StatesGroup):
     WaitingForOldCode = State()
     WaitingForNewCode = State()
     WaitingForNewTitle = State()
-
-# Foydalanuvchi bilan chatlashish holati
+    
 class UserStates(StatesGroup):
     waiting_for_admin_message = State()
 
-# Qidiruv (masalan, anime nomi bo‘yicha)
 class SearchStates(StatesGroup):
     waiting_for_anime_name = State()
-
-# Post yuborish jarayoni
+    
 class PostStates(StatesGroup):
     waiting_for_image = State()
     waiting_for_title = State()
     waiting_for_link = State()
 
-# === OBUNA TEKSHIRISH FUNKSIYASI ===
 async def get_unsubscribed_channels(user_id):
     unsubscribed = []
     for channel in CHANNELS:
@@ -99,8 +87,6 @@ async def get_unsubscribed_channels(user_id):
             unsubscribed.append(channel)
     return unsubscribed
 
-
-# === OBUNA TEKSHIRISH FUNKSIYASI ===
 async def is_user_subscribed(user_id):
     for channel in CHANNELS:
         try:
@@ -111,8 +97,7 @@ async def is_user_subscribed(user_id):
             print(f"❗ Obuna holatini aniqlab bo‘lmadi: {channel} -> {e}")
             return False
     return True
-
-# === BARCHA KANALLAR UCHUN OBUNA MARKUP ===
+    
 async def make_full_subscribe_markup(code):
     markup = InlineKeyboardMarkup(row_width=1)
     for ch in CHANNELS:
@@ -125,7 +110,6 @@ async def make_full_subscribe_markup(code):
     markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
     return markup
 
-# === /start HANDLER – to‘liq versiya (statistika bilan) ===
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
@@ -148,7 +132,6 @@ async def start_handler(message: types.Message):
             await increment_stat(code, "searched")
         return
 
-    # === Oddiy /start ===
     if message.from_user.id in ADMINS:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
@@ -166,7 +149,6 @@ async def start_handler(message: types.Message):
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
 
-# === TEKSHIRUV CALLBACK – faqat obuna bo‘lmaganlar uchun ===
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
     code = call.data.split(":")[1]
@@ -187,7 +169,7 @@ async def check_subscription_callback(call: CallbackQuery):
         await call.message.delete()
         await send_reklama_post(call.from_user.id, code)
         await increment_stat(code, "searched")
-# === 🎞 Barcha animelar tugmasi
+        
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
     kodlar = await get_all_codes()
@@ -202,7 +184,6 @@ async def show_all_animes(message: types.Message):
 
     await message.answer(text, parse_mode="Markdown")
 
-# === ✉️ Admin bilan bog‘lanish ===
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
 async def contact_admin(message: types.Message):
     await UserStates.waiting_for_admin_message.set()
@@ -643,8 +624,6 @@ async def kodlar(message: types.Message):
 
     await message.answer(text, parse_mode="Markdown")
 
-    
-# === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
     kodlar = await get_all_codes()
@@ -692,8 +671,6 @@ async def get_post_link(message: types.Message, state: FSMContext):
     finally:
         await state.finish()
 
-
-# === ❌ Kodni o‘chirish
 @dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish")
 async def ask_delete_code(message: types.Message):
     if message.from_user.id in ADMINS:
@@ -713,7 +690,6 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
     else:
         await message.answer("❌ Kod topilmadi yoki o‘chirib bo‘lmadi.")
 
-# === START ===
 async def on_startup(dp):
     await init_db()
     print("✅ PostgreSQL bazaga ulandi!")
