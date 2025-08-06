@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
-from konkurs import register_konkurs_handlers
+from konkurs import init_db, register_konkurs_handlers
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -764,9 +764,10 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
     else:
         await message.answer("❌ Kod topilmadi yoki o‘chirib bo‘lmadi.")
 
+register_konkurs_handlers(dp, bot, ADMINS)
+
 async def on_startup(dp):
     await init_db()
-    register_konkurs_handlers(dp, bot, ADMINS)
     print("✅ PostgreSQL bazaga ulandi!")
 
 if __name__ == "__main__":
