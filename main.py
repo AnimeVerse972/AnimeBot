@@ -122,23 +122,19 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
+    args = (message.get_args() or "").strip()
 
     # 1️⃣ Majburiy obuna tekshiruvi
     unsubscribed = await get_unsubscribed_channels(message.from_user.id)
     if unsubscribed:
-        # Agar obuna bo'lmagan kanallar bo‘lsa — boshqa kodlarni ishlatmasdan qaytish
-        args = (message.get_args() or "").strip()
         markup = await make_full_subscribe_markup(args)
         await message.answer(
             "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
             reply_markup=markup
         )
-        return
+        return  # Obuna bo'lmasa boshqa kod ishlamaydi
 
-    # 2️⃣ Argumentni olish
-    args = (message.get_args() or "").strip()
-
-    # --- deeplink: /start konkurs ---
+    # 2️⃣ Agar deeplink konkurs bo'lsa
     if args == "konkurs":
         pdata = load_participants()
         arr = pdata.get("participants", [])
@@ -149,14 +145,14 @@ async def start_handler(message: types.Message):
         await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
         return
 
-    # --- /start <code> (raqam) ---
+    # 3️⃣ Agar kod kiritilgan bo‘lsa
     if args and args.isdigit():
         code = args
         await increment_stat(code, "searched")
         await send_reklama_post(message.from_user.id, code)
         return
 
-    # --- Menyular ---
+    # 4️⃣ Oddiy menyu
     if message.from_user.id in ADMINS:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
@@ -174,6 +170,7 @@ async def start_handler(message: types.Message):
             KeyboardButton("✉️ Admin bilan bog‘lanish")
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+
 
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
