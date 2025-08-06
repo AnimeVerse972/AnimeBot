@@ -1,4 +1,3 @@
-# konkurs.py
 import os
 import json
 import random
@@ -9,13 +8,12 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
 # ==== ENV ====
-# .env: MAIN_CHANNELS="@kanal1,@kanal2" yoki " -100123,-100456 "
 MAIN_CHANNELS = [c.strip() for c in (os.getenv("MAIN_CHANNELS") or "").split(",") if c.strip()]
 
 # ==== FAYL YO'LLARI ====
 DATA_DIR = "participants"
 PARTICIPANTS_FILE = os.path.join(DATA_DIR, "participants.json")
-CONTEST_FILE = os.path.join(DATA_DIR, "contest.json")  # active, post_ids, winners
+CONTEST_FILE = os.path.join(DATA_DIR, "contest.json")
 
 # ==== FS ====
 def ensure_dirs():
@@ -27,19 +25,19 @@ def ensure_dirs():
         with open(CONTEST_FILE, "w", encoding="utf-8") as f:
             json.dump({"active": False, "post_ids": [], "winners": []}, f, indent=2, ensure_ascii=False)
 
-def load_participants() -> Dict[str, Any]:
+def load_participants():
     with open(PARTICIPANTS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_participants(data: Dict[str, Any]) -> None:
+def save_participants(data):
     with open(PARTICIPANTS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def load_contest() -> Dict[str, Any]:
+def load_contest():
     with open(CONTEST_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_contest(data: Dict[str, Any]) -> None:
+def save_contest(data):
     with open(CONTEST_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -49,7 +47,7 @@ class KonkursStates(StatesGroup):
     waiting_for_caption = State()
 
 # ==== TUGMALAR ====
-def konkurs_menu_kb() -> InlineKeyboardMarkup:
+def konkurs_menu_kb():
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
         InlineKeyboardButton("🚀 Konkursni boshlash", callback_data="konkurs:start"),
@@ -59,30 +57,21 @@ def konkurs_menu_kb() -> InlineKeyboardMarkup:
     )
     return kb
 
-def participate_kb(bot_username: str) -> InlineKeyboardMarkup:
-    """
-    Deep-link tugma: foydalanuvchi bosganda bot oynasi /start konkurs bilan ochiladi.
-    """
+def participate_kb(bot_username: str):
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("✅ Ishtirok etish", url=f"https://t.me/{bot_username}?start=konkurs"))
     return kb
 
 # ==== SUBS TEKSHIRUV ====
 async def is_user_subscribed(bot, user_id: int) -> bool:
-    """
-    Barcha MAIN_CHANNELS bo'yicha obunani tekshiradi.
-    Bot kanalda admin bo'lishi shart, aks holda False qaytadi.
-    """
     if not MAIN_CHANNELS:
-        # Agar kanallar belgilanmagan bo'lsa, tekshiruvni o'tkazib yuboramiz (True).
         return True
     for ch in MAIN_CHANNELS:
         try:
             member = await bot.get_chat_member(ch, user_id)
-            status = getattr(member, "status", None)
-            if status not in ("member", "administrator", "creator"):
+            if getattr(member, "status", None) not in ("member", "administrator", "creator"):
                 return False
-        except Exception:
+        except:
             return False
     return True
 
@@ -110,44 +99,35 @@ async def dm_winners(bot, winners: List[int]):
         try:
             await bot.send_message(
                 uid,
-                f"{medals[i]} Tabriklaymiz! Siz g‘olib bo‘ldingiz. 🎉\n"
-                "Admin tez orada bog‘lanadi.",
+                f"{medals[i]} Tabriklaymiz! Siz g‘olib bo‘ldingiz. 🎉\nAdmin tez orada bog‘lanadi.",
                 parse_mode="HTML"
             )
         except Exception as e:
             print(f"[dm_winner] {uid} -> {e}")
 
-# ==== REGISTRATOR ====
+# ==== HANDLERLAR ====
 def register_konkurs_handlers(dp, bot, ADMINS: set):
 
     ensure_dirs()
 
-    # === /start handler: deeplink orqali ishtirokni ro'yxatdan o'tkazish ===
     @dp.message_handler(commands=["start"])
     async def cmd_start(message: types.Message):
         args = message.get_args().strip() if hasattr(message, "get_args") else ""
         if args == "konkurs":
-            # Obuna tekshiruvi
             subscribed = await is_user_subscribed(message.bot, message.from_user.id)
             if not subscribed:
                 await message.answer("❗️ Avval kanallarga obuna bo‘ling, so‘ngra qayta urinib ko‘ring.")
                 return
-
-            # Ishtirokchilar ro‘yxati
             pdata = load_participants()
             arr = pdata.get("participants", [])
             if message.from_user.id not in arr:
                 arr.append(message.from_user.id)
                 pdata["participants"] = arr
                 save_participants(pdata)
-
             await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
             return
-
-        # Oddiy start
         await message.answer("Salom! Bu bot konkurslar o‘tkazadi.")
 
-    # --- Admin paneldagi "🏆 Konkurs" tugmasi ---
     @dp.message_handler(lambda m: m.text == "🏆 Konkurs")
     async def open_konkurs_menu(message: types.Message):
         if message.from_user.id not in ADMINS:
@@ -158,28 +138,22 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
         win_line = f"\nG‘oliblar soni: {len(winners)}" if winners else ""
         await message.answer(f"🏆 Konkurs bo‘limi\nHolat: {status}{win_line}", reply_markup=konkurs_menu_kb())
 
-    # --- Menyu tugmalarini boshqarish ---
     @dp.callback_query_handler(lambda c: c.data.startswith("konkurs:"))
     async def konkurs_menu_cb(callback: CallbackQuery, state: FSMContext):
-        if callback.from_user.id not in ADMINS and not callback.data.endswith("participate"):
+        if callback.from_user.id not in ADMINS:
             await callback.answer()
             return
-
         _, action = callback.data.split(":", 1)
-
         if action == "start":
             await KonkursStates.waiting_for_image.set()
-            await callback.message.answer("🖼 Iltimos, konkurs post uchun *rasm yuboring*.", parse_mode="Markdown")
-            await callback.answer()
-
+            await callback.message.answer("🖼 Konkurs post uchun rasm yuboring.")
         elif action == "participants":
             data = load_participants()
             ids = data.get("participants", [])
             if not ids:
-                await callback.message.answer("ℹ️ Hozircha ishtirokchilar yo‘q.")
+                await callback.message.answer("ℹ️ Ishtirokchilar yo‘q.")
             else:
-                header = "👥 Ishtirokchilar ro‘yxati:\n\n"
-                chunk = header
+                chunk = "👥 Ishtirokchilar:\n\n"
                 for i, uid in enumerate(ids, 1):
                     line = f"{i}. <code>{uid}</code>\n"
                     if len(chunk) + len(line) > 3800:
@@ -188,122 +162,75 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
                     chunk += line
                 if chunk:
                     await callback.message.answer(chunk, parse_mode="HTML")
-            await callback.answer()
-
         elif action == "finish":
             st = load_contest()
-            if not st.get("active"):
-                await callback.message.answer("ℹ️ Konkurs allaqachon faol emas.")
+            st["active"] = False
+            save_contest(st)
+            winners = st.get("winners", [])
+            if winners:
+                ok, fail = await announce_winners_to_channels(callback.message.bot, winners)
+                await dm_winners(callback.message.bot, winners)
+                await callback.message.answer(f"✅ Konkurs yakunlandi. E’lon: {ok} ta, xato: {fail} ta.")
             else:
-                st["active"] = False
-                save_contest(st)
-                winners = st.get("winners", [])
-                if winners:
-                    ok, fail = await announce_winners_to_channels(callback.message.bot, winners)
-                    await dm_winners(callback.message.bot, winners)
-                    await callback.message.answer(
-                        f"✅ Konkurs yakunlandi. E’lon yuborildi: {ok} ta kanalga, xatolik: {fail} ta."
-                    )
-                else:
-                    await callback.message.answer("✅ Konkurs yakunlandi (g‘oliblar yo‘q).")
-            await callback.answer()
-
+                await callback.message.answer("✅ Konkurs yakunlandi (g‘oliblar yo‘q).")
         elif action == "pick":
             st = load_contest()
             if not st.get("active"):
                 await callback.message.answer("ℹ️ Konkurs faol emas.")
-                await callback.answer()
                 return
-
             pdata = load_participants()
             participants = pdata.get("participants", [])
             winners = st.get("winners", [])
-
             if len(winners) >= 3:
-                await callback.message.answer("✅ 3 ta g‘olib allaqachon tanlangan.")
-                await callback.answer()
+                await callback.message.answer("✅ 3 ta g‘olib tanlangan.")
                 return
-
             candidates = [uid for uid in participants if uid not in winners]
             if not candidates:
-                await callback.message.answer("❌ Tanlash uchun nomzod qolmadi.")
-                await callback.answer()
+                await callback.message.answer("❌ Nomzod qolmadi.")
                 return
-
             winner = random.choice(candidates)
             winners.append(winner)
             st["winners"] = winners
             save_contest(st)
-
             medals = ["🥇", "🥈", "🥉"]
-            place = medals[len(winners) - 1]
-            await callback.message.answer(
-                f"{place} G‘olib: <a href='tg://user?id={winner}'>{winner}</a>",
-                parse_mode="HTML"
-            )
-
-            # 3-bo'lsa -> auto finish + e'lon + DM
+            await callback.message.answer(f"{medals[len(winners)-1]} G‘olib: <a href='tg://user?id={winner}'>{winner}</a>", parse_mode="HTML")
             if len(winners) == 3:
                 st["active"] = False
                 save_contest(st)
                 ok, fail = await announce_winners_to_channels(callback.message.bot, winners)
                 await dm_winners(callback.message.bot, winners)
-                await callback.message.answer(
-                    f"🏁 Konkurs yakunlandi.\n📣 E’lon yuborildi: {ok} ta kanalga, xatolik: {fail} ta."
-                )
+                await callback.message.answer(f"🏁 Konkurs yakunlandi.\n📣 E’lon: {ok} ta, xato: {fail} ta.")
 
-            await callback.answer()
-
-    # --- 1-qadam: Rasmni qabul qilish ---
     @dp.message_handler(content_types=types.ContentType.PHOTO, state=KonkursStates.waiting_for_image)
     async def konkurs_get_image(message: types.Message, state: FSMContext):
         if message.from_user.id not in ADMINS:
             return
-        photo_id = message.photo[-1].file_id
-        await state.update_data(photo=photo_id)
+        await state.update_data(photo=message.photo[-1].file_id)
         await KonkursStates.waiting_for_caption.set()
-        await message.answer(
-            "✍️ Endi *post matnini* yuboring (caption).\n"
-            "ℹ️ Kanallar ro‘yxatini matn ichida o‘zingiz kiritib ketavering.",
-            parse_mode="Markdown"
-        )
+        await message.answer("✍️ Endi post matnini yuboring.")
 
-    # --- 2-qadam: Captionni qabul qilish va kanallarga yuborish (DEEPLINK tugma bilan) ---
     @dp.message_handler(state=KonkursStates.waiting_for_caption)
     async def konkurs_get_caption_and_post(message: types.Message, state: FSMContext):
         if message.from_user.id not in ADMINS:
             return
-
         data = await state.get_data()
         photo_id = data.get("photo")
         caption = (message.text or "").strip()
-
         if not MAIN_CHANNELS:
-            await message.answer("❌ MAIN_CHANNELS .env da topilmadi.")
+            await message.answer("❌ MAIN_CHANNELS topilmadi.")
             await state.finish()
             return
-
-        # Konkursni faollashtiramiz (winners tozalanadi)
         st = load_contest()
         st["active"] = True
         st["post_ids"] = []
         st["winners"] = []
         save_contest(st)
-
-        # Deep-link tugma uchun bot username
         me = await message.bot.get_me()
         kb = participate_kb(me.username)
-
         ok = fail = 0
         for ch in MAIN_CHANNELS:
             try:
-                sent = await message.bot.send_photo(
-                    chat_id=ch,
-                    photo=photo_id,
-                    caption=caption,
-                    reply_markup=kb
-                )
-                # post id larni saqlash
+                sent = await message.bot.send_photo(ch, photo=photo_id, caption=caption, reply_markup=kb)
                 st = load_contest()
                 post_ids = st.get("post_ids", [])
                 post_ids.append({"chat": ch, "message_id": sent.message_id})
@@ -313,6 +240,5 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
             except Exception as e:
                 print(f"[POST] {ch} -> {e}")
                 fail += 1
-
-        await message.answer(f"✅ Yuborildi: {ok} ta\n❌ Xato: {fail} ta\n🟢 Konkurs holati: FAOL")
+        await message.answer(f"✅ Yuborildi: {ok} ta\n❌ Xato: {fail} ta\n🟢 Konkurs FAOL")
         await state.finish()
