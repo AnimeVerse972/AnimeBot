@@ -122,7 +122,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
-    ensure_dirs()
+    # get_args() aiogram 2.25 da bor; None bo‘lsa bo‘sh qatorga tushirsin
     args = (message.get_args() or "").strip()
 
     # 0) Userni ro‘yxatga olish (sening funksiyang)
