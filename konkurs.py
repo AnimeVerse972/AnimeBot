@@ -59,9 +59,12 @@ def konkurs_menu_kb() -> InlineKeyboardMarkup:
     )
     return kb
 
-def participate_kb() -> InlineKeyboardMarkup:
+def participate_kb(bot_username: str) -> InlineKeyboardMarkup:
+    """
+    Deep-link tugma: foydalanuvchi bosganda bot oynasi /start konkurs bilan ochiladi.
+    """
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("✅ Ishtirok etish", callback_data="konkurs:participate"))
+    kb.add(InlineKeyboardButton("✅ Ishtirok etish", url=f"https://t.me/{bot_username}?start=konkurs"))
     return kb
 
 # ==== SUBS TEKSHIRUV ====
@@ -118,6 +121,31 @@ async def dm_winners(bot, winners: List[int]):
 def register_konkurs_handlers(dp, bot, ADMINS: set):
 
     ensure_dirs()
+
+    # === /start handler: deeplink orqali ishtirokni ro'yxatdan o'tkazish ===
+    @dp.message_handler(commands=["start"])
+    async def cmd_start(message: types.Message):
+        args = message.get_args().strip() if hasattr(message, "get_args") else ""
+        if args == "konkurs":
+            # Obuna tekshiruvi
+            subscribed = await is_user_subscribed(message.bot, message.from_user.id)
+            if not subscribed:
+                await message.answer("❗️ Avval kanallarga obuna bo‘ling, so‘ngra qayta urinib ko‘ring.")
+                return
+
+            # Ishtirokchilar ro‘yxati
+            pdata = load_participants()
+            arr = pdata.get("participants", [])
+            if message.from_user.id not in arr:
+                arr.append(message.from_user.id)
+                pdata["participants"] = arr
+                save_participants(pdata)
+
+            await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
+            return
+
+        # Oddiy start
+        await message.answer("Salom! Bu bot konkurslar o‘tkazadi.")
 
     # --- Admin paneldagi "🏆 Konkurs" tugmasi ---
     @dp.message_handler(lambda m: m.text == "🏆 Konkurs")
@@ -180,50 +208,6 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
                     await callback.message.answer("✅ Konkurs yakunlandi (g‘oliblar yo‘q).")
             await callback.answer()
 
-        elif action == "participate":
-            # Bu bo'lim foydalanuvchi (admin bo'lmasa ham) bosishi uchun ochiq
-            st = load_contest()
-            if not st.get("active"):
-                await callback.answer("Konkurs faol emas!", show_alert=True)
-                return
-
-            uid = callback.from_user.id
-
-            # 1) Majburiy obuna tekshiruvi
-            subscribed = await is_user_subscribed(callback.message.bot, uid)
-            if not subscribed:
-                # Admin caption ichida kanallarni yozib ketadi — shu yerda eslatib qo'yamiz
-                text = "❗️ Avval kanallarga obuna bo‘ling, so‘ngra yana urinib ko‘ring."
-                await callback.answer(text, show_alert=True)
-                return
-
-            # 2) Ishtirokchilar bazasi
-            pdata = load_participants()
-            arr = pdata.get("participants", [])
-
-            if uid in arr:
-                await callback.answer("Siz allaqachon ishtirokchisiz.", show_alert=True)
-                return
-
-            arr.append(uid)
-            pdata["participants"] = arr
-            save_participants(pdata)
-
-            # 3) DM ga xabar yuborish
-            try:
-                await callback.message.bot.send_message(
-                    uid,
-                    "✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.\n"
-                    "G‘oliblar e’lon qilinishi bilan xabar olasiz."
-                )
-                await callback.answer("✅ Ishtirok tasdiqlandi!", show_alert=False)
-            except Exception:
-                # Foydalanuvchi bot bilan chatni boshlamagan bo'lishi mumkin
-                await callback.answer(
-                    "✅ Qo‘shildingiz!\nMenga /start yuboring — DM orqali yangiliklarni bera olishim uchun.",
-                    show_alert=True
-                )
-
         elif action == "pick":
             st = load_contest()
             if not st.get("active"):
@@ -284,7 +268,7 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
             parse_mode="Markdown"
         )
 
-    # --- 2-qadam: Captionni qabul qilish va kanallarga yuborish ---
+    # --- 2-qadam: Captionni qabul qilish va kanallarga yuborish (DEEPLINK tugma bilan) ---
     @dp.message_handler(state=KonkursStates.waiting_for_caption)
     async def konkurs_get_caption_and_post(message: types.Message, state: FSMContext):
         if message.from_user.id not in ADMINS:
@@ -306,9 +290,11 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
         st["winners"] = []
         save_contest(st)
 
-        kb = participate_kb()
-        ok = fail = 0
+        # Deep-link tugma uchun bot username
+        me = await message.bot.get_me()
+        kb = participate_kb(me.username)
 
+        ok = fail = 0
         for ch in MAIN_CHANNELS:
             try:
                 sent = await message.bot.send_photo(
@@ -317,7 +303,7 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
                     caption=caption,
                     reply_markup=kb
                 )
-                # post id larni saqlash (istalgan payt o'chirish/tahrir uchun kerak bo'lsa)
+                # post id larni saqlash
                 st = load_contest()
                 post_ids = st.get("post_ids", [])
                 post_ids.append({"chat": ch, "message_id": sent.message_id})
