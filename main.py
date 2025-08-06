@@ -766,7 +766,9 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
 register_konkurs_handlers(dp, bot, ADMINS)
 
 async def on_startup(dp):
-    await init_db()
+    await init_main_db()   # umumiy bot jadvallari
+    await db_init()        # faqat konkurs jadvallari
+    register_konkurs_handlers(dp, bot, ADMINS)
     print("✅ PostgreSQL bazaga ulandi!")
 
 if __name__ == "__main__":
