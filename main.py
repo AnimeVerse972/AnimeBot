@@ -102,14 +102,17 @@ async def is_user_subscribed(user_id):
 async def make_full_subscribe_markup(code):
     markup = InlineKeyboardMarkup(row_width=1)
     for ch in CHANNELS:
+        ch = ch.strip()
         try:
-            channel = await bot.get_chat(ch.strip())
-            invite_link = channel.invite_link or (await channel.export_invite_link())
-            markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
+            chat = await bot.get_chat(ch)
+            invite_link = chat.invite_link or await bot.export_chat_invite_link(chat.id)
+            title = chat.title or ch
+            markup.add(InlineKeyboardButton(f"➕ {title}", url=invite_link))
         except Exception as e:
-            print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
-    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
+            print(f"❗ Kanal linkini olishda xatolik: {ch} -> {e}")
+    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return markup
+
 
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
