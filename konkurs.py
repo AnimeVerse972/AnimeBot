@@ -4,13 +4,12 @@ import json
 import random
 from typing import List, Dict, Any
 from aiogram import types
-from aiogram.types import (
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-)
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
 # ==== ENV ====
+# .env: MAIN_CHANNELS="@kanal1,@kanal2" yoki " -100123,-100456 "
 MAIN_CHANNELS = [c.strip() for c in (os.getenv("MAIN_CHANNELS") or "").split(",") if c.strip()]
 
 # ==== FAYL YO'LLARI ====
@@ -65,6 +64,25 @@ def participate_kb() -> InlineKeyboardMarkup:
     kb.add(InlineKeyboardButton("✅ Ishtirok etish", callback_data="konkurs:participate"))
     return kb
 
+# ==== SUBS TEKSHIRUV ====
+async def is_user_subscribed(bot, user_id: int) -> bool:
+    """
+    Barcha MAIN_CHANNELS bo'yicha obunani tekshiradi.
+    Bot kanalda admin bo'lishi shart, aks holda False qaytadi.
+    """
+    if not MAIN_CHANNELS:
+        # Agar kanallar belgilanmagan bo'lsa, tekshiruvni o'tkazib yuboramiz (True).
+        return True
+    for ch in MAIN_CHANNELS:
+        try:
+            member = await bot.get_chat_member(ch, user_id)
+            status = getattr(member, "status", None)
+            if status not in ("member", "administrator", "creator"):
+                return False
+        except Exception:
+            return False
+    return True
+
 # ==== E'LON & DM ====
 async def announce_winners_to_channels(bot, winners: List[int]):
     if not winners:
@@ -115,7 +133,7 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
     # --- Menyu tugmalarini boshqarish ---
     @dp.callback_query_handler(lambda c: c.data.startswith("konkurs:"))
     async def konkurs_menu_cb(callback: CallbackQuery, state: FSMContext):
-        if callback.from_user.id not in ADMINS:
+        if callback.from_user.id not in ADMINS and not callback.data.endswith("participate"):
             await callback.answer()
             return
 
@@ -163,26 +181,48 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
             await callback.answer()
 
         elif action == "participate":
+            # Bu bo'lim foydalanuvchi (admin bo'lmasa ham) bosishi uchun ochiq
             st = load_contest()
             if not st.get("active"):
                 await callback.answer("Konkurs faol emas!", show_alert=True)
                 return
 
-            pdata = load_participants()
             uid = callback.from_user.id
+
+            # 1) Majburiy obuna tekshiruvi
+            subscribed = await is_user_subscribed(callback.message.bot, uid)
+            if not subscribed:
+                # Admin caption ichida kanallarni yozib ketadi — shu yerda eslatib qo'yamiz
+                text = "❗️ Avval kanallarga obuna bo‘ling, so‘ngra yana urinib ko‘ring."
+                await callback.answer(text, show_alert=True)
+                return
+
+            # 2) Ishtirokchilar bazasi
+            pdata = load_participants()
             arr = pdata.get("participants", [])
 
             if uid in arr:
                 await callback.answer("Siz allaqachon ishtirokchisiz.", show_alert=True)
-            else:
-                arr.append(uid)
-                pdata["participants"] = arr
-                save_participants(pdata)
-                await callback.answer("✅ Ishtirok uchun rahmat!", show_alert=False)
-                try:
-                    await callback.message.answer(f"✅ Qo‘shildingiz: <code>{uid}</code>", parse_mode="HTML")
-                except:
-                    pass
+                return
+
+            arr.append(uid)
+            pdata["participants"] = arr
+            save_participants(pdata)
+
+            # 3) DM ga xabar yuborish
+            try:
+                await callback.message.bot.send_message(
+                    uid,
+                    "✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.\n"
+                    "G‘oliblar e’lon qilinishi bilan xabar olasiz."
+                )
+                await callback.answer("✅ Ishtirok tasdiqlandi!", show_alert=False)
+            except Exception:
+                # Foydalanuvchi bot bilan chatni boshlamagan bo'lishi mumkin
+                await callback.answer(
+                    "✅ Qo‘shildingiz!\nMenga /start yuboring — DM orqali yangiliklarni bera olishim uchun.",
+                    show_alert=True
+                )
 
         elif action == "pick":
             st = load_contest()
@@ -238,7 +278,11 @@ def register_konkurs_handlers(dp, bot, ADMINS: set):
         photo_id = message.photo[-1].file_id
         await state.update_data(photo=photo_id)
         await KonkursStates.waiting_for_caption.set()
-        await message.answer("✍️ Endi *post matnini* yuboring (caption).", parse_mode="Markdown")
+        await message.answer(
+            "✍️ Endi *post matnini* yuboring (caption).\n"
+            "ℹ️ Kanallar ro‘yxatini matn ichida o‘zingiz kiritib ketavering.",
+            parse_mode="Markdown"
+        )
 
     # --- 2-qadam: Captionni qabul qilish va kanallarga yuborish ---
     @dp.message_handler(state=KonkursStates.waiting_for_caption)
