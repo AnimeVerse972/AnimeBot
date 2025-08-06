@@ -121,55 +121,83 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
-    await add_user(message.from_user.id)
+    user_id = message.from_user.id
+    # get_args() aiogram 2.25 da bor; None bo‘lsa bo‘sh qatorga tushirsin
     args = (message.get_args() or "").strip()
 
-    # 1️⃣ Majburiy obuna tekshiruvi
-    unsubscribed = await get_unsubscribed_channels(message.from_user.id)
+    # 0) Userni ro‘yxatga olish (sening funksiyang)
+    try:
+        await add_user(user_id)
+    except Exception as e:
+        # ro‘yxatga qo‘shish muvaffaqiyatsiz bo‘lsa ham flow to‘xtamasin
+        print(f"[add_user] {user_id} -> {e}")
+
+    # 1) Majburiy obuna tekshiruvi (deeplink parametrini saqlagan holda)
+    try:
+        unsubscribed = await get_unsubscribed_channels(user_id)
+    except Exception as e:
+        print(f"[subs_check] {user_id} -> {e}")
+        unsubscribed = []
+
     if unsubscribed:
+        # args ni markup ga uzatyapmiz — obuna bo‘lgandan keyin qaytishda deeplink saqlansin
         markup = await make_full_subscribe_markup(args)
         await message.answer(
             "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
             reply_markup=markup
         )
-        return  # Obuna bo'lmasa boshqa kod ishlamaydi
-
-    # 2️⃣ Agar deeplink konkurs bo'lsa
-    if args == "konkurs":
-        pdata = load_participants()
-        arr = pdata.get("participants", [])
-        if message.from_user.id not in arr:
-            arr.append(message.from_user.id)
-            pdata["participants"] = arr
-            save_participants(pdata)
-        await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
         return
 
-    # 3️⃣ Agar kod kiritilgan bo‘lsa
+    # 2) Deeplink: konkurs
+    if args.lower() == "konkurs":
+        try:
+            pdata = load_participants()
+            arr = pdata.get("participants", [])
+            if user_id not in arr:
+                arr.append(user_id)
+                pdata["participants"] = arr
+                save_participants(pdata)
+            await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
+        except Exception as e:
+            print(f"[konkurs_join] {user_id} -> {e}")
+            await message.answer("⚠️ Ishtirokni qayd etishda xatolik yuz berdi. Iltimos, yana urinib ko‘ring.")
+        return
+
+    # 3) Agar /start 12345 kabi kod bilan kelgan bo‘lsa (faqat raqam)
     if args and args.isdigit():
         code = args
-        await increment_stat(code, "searched")
-        await send_reklama_post(message.from_user.id, code)
+        try:
+            await increment_stat(code, "searched")
+        except Exception as e:
+            print(f"[increment_stat] {code} -> {e}")
+        try:
+            await send_reklama_post(user_id, code)
+        except Exception as e:
+            print(f"[send_reklama_post] {user_id}, code={code} -> {e}")
+            await message.answer("⚠️ Postni yuborishda muammo bo‘ldi. Keyinroq urinib ko‘ring.")
         return
 
-    # 4️⃣ Oddiy menyu
-    if message.from_user.id in ADMINS:
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("➕ Anime qo‘shish")
-        kb.add("📊 Statistika", "📈 Kod statistikasi")
-        kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
-        kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
-        kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-        kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
-        kb.add("📥 User qo‘shish")
-        await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
-    else:
-        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        kb.add(
-            KeyboardButton("🎞 Barcha animelar"),
-            KeyboardButton("✉️ Admin bilan bog‘lanish")
-        )
-        await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+    # 4) Oddiy menyu
+    try:
+        if user_id in ADMINS:
+            kb = ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("➕ Anime qo‘shish")
+            kb.add("📊 Statistika", "📈 Kod statistikasi")
+            kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
+            kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
+            kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
+            kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
+            kb.add("📥 User qo‘shish")
+            await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
+        else:
+            kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            kb.add(
+                KeyboardButton("🎞 Barcha animelar"),
+                KeyboardButton("✉️ Admin bilan bog‘lanish")
+            )
+            await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+    except Exception as e:
+        print(f"[menu] {user_id} -> {e}")
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
