@@ -114,15 +114,33 @@ async def make_full_subscribe_markup(code):
     markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return markup
 
+from aiogram import types
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+# konkurs.py dan:
+# from konkurs import load_participants, save_participants, ensure_dirs
 
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
-    args = message.get_args()
+    args = (message.get_args() or "").strip()
 
+    # --- deeplink: /start konkurs ---
+    if args == "konkurs":
+        # Majburiy obuna tekshiruvi allaqachon main.py da ishlaydi (middleware/handler).
+        pdata = load_participants()
+        arr = pdata.get("participants", [])
+        if message.from_user.id not in arr:
+            arr.append(message.from_user.id)
+            pdata["participants"] = arr
+            save_participants(pdata)
+
+        await message.answer("✅ Ishtirok uchun rahmat! Siz ishtirokchilar ro‘yxatiga qo‘shildingiz.")
+        return
+
+    # --- /start <code> (raqam) ---
     if args and args.isdigit():
         code = args
-        await increment_stat(code, "init")
+        # Faqat searched ni oshiramiz (oldingi kelishuv bo‘yicha)
         await increment_stat(code, "searched")
 
         unsubscribed = await get_unsubscribed_channels(message.from_user.id)
@@ -134,9 +152,10 @@ async def start_handler(message: types.Message):
             )
         else:
             await send_reklama_post(message.from_user.id, code)
-            await increment_stat(code, "searched")
+            # qayta increment shart emas, yuqorida bitta qilindi
         return
 
+    # --- Menyular ---
     if message.from_user.id in ADMINS:
         kb = ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("➕ Anime qo‘shish")
@@ -154,6 +173,7 @@ async def start_handler(message: types.Message):
             KeyboardButton("✉️ Admin bilan bog‘lanish")
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+
 
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
