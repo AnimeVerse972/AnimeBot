@@ -122,37 +122,38 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
+
+    # 1️⃣ Majburiy obuna tekshiruvi
+    unsubscribed = await get_unsubscribed_channels(message.from_user.id)
+    if unsubscribed:
+        # Agar obuna bo'lmagan kanallar bo‘lsa — boshqa kodlarni ishlatmasdan qaytish
+        args = (message.get_args() or "").strip()
+        markup = await make_full_subscribe_markup(args)
+        await message.answer(
+            "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
+            reply_markup=markup
+        )
+        return
+
+    # 2️⃣ Argumentni olish
     args = (message.get_args() or "").strip()
 
     # --- deeplink: /start konkurs ---
     if args == "konkurs":
-        # Majburiy obuna tekshiruvi allaqachon main.py da ishlaydi (middleware/handler).
         pdata = load_participants()
         arr = pdata.get("participants", [])
         if message.from_user.id not in arr:
             arr.append(message.from_user.id)
             pdata["participants"] = arr
             save_participants(pdata)
-
-        await message.answer("✅ Ishtirok uchun rahmat! Siz ishtirokchilar ro‘yxatiga qo‘shildingiz.")
+        await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
         return
 
     # --- /start <code> (raqam) ---
     if args and args.isdigit():
         code = args
-        # Faqat searched ni oshiramiz (oldingi kelishuv bo‘yicha)
         await increment_stat(code, "searched")
-
-        unsubscribed = await get_unsubscribed_channels(message.from_user.id)
-        if unsubscribed:
-            markup = await make_full_subscribe_markup(code)
-            await message.answer(
-                "❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:",
-                reply_markup=markup
-            )
-        else:
-            await send_reklama_post(message.from_user.id, code)
-            # qayta increment shart emas, yuqorida bitta qilindi
+        await send_reklama_post(message.from_user.id, code)
         return
 
     # --- Menyular ---
@@ -173,7 +174,6 @@ async def start_handler(message: types.Message):
             KeyboardButton("✉️ Admin bilan bog‘lanish")
         )
         await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
-
 
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
