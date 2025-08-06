@@ -129,7 +129,7 @@ async def start_handler(message: types.Message):
     try:
         await add_user(user_id)
     except Exception as e:
-        # ro‘yxatga qo‘shish muvaffaqiyatsiz bo‘lsa ham flow to‘xtamasin
+        # ro‘yxatga qo‘shish muvaffiyatsiz bo‘lsa ham flow to‘xtamasin
         print(f"[add_user] {user_id} -> {e}")
 
     # 1) Majburiy obuna tekshiruvi (deeplink parametrini saqlagan holda)
@@ -148,22 +148,7 @@ async def start_handler(message: types.Message):
         )
         return
 
-    # 2) Deeplink: konkurs
-    if args.lower() == "konkurs":
-        try:
-            pdata = load_participants()
-            arr = pdata.get("participants", [])
-            if user_id not in arr:
-                arr.append(user_id)
-                pdata["participants"] = arr
-                save_participants(pdata)
-            await message.answer("✅ Ishtirok uchun rahmat! Siz ro‘yxatga qo‘shildingiz.")
-        except Exception as e:
-            print(f"[konkurs_join] {user_id} -> {e}")
-            await message.answer("⚠️ Ishtirokni qayd etishda xatolik yuz berdi. Iltimos, yana urinib ko‘ring.")
-        return
-
-    # 3) Agar /start 12345 kabi kod bilan kelgan bo‘lsa (faqat raqam)
+    # 2) Raqamli deeplink: /start 12345 -> kodni yuborish
     if args and args.isdigit():
         code = args
         try:
@@ -177,7 +162,7 @@ async def start_handler(message: types.Message):
             await message.answer("⚠️ Postni yuborishda muammo bo‘ldi. Keyinroq urinib ko‘ring.")
         return
 
-    # 4) Oddiy menyu
+    # 3) Oddiy /start: xush kelibsiz + foydalanuvchi ID
     try:
         if user_id in ADMINS:
             kb = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -188,17 +173,20 @@ async def start_handler(message: types.Message):
             kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
             kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
             kb.add("📥 User qo‘shish")
-            await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
+            await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{user_id}</code>", reply_markup=kb, parse_mode="HTML")
         else:
             kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
             kb.add(
                 KeyboardButton("🎞 Barcha animelar"),
                 KeyboardButton("✉️ Admin bilan bog‘lanish")
             )
-            await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+            await message.answer(
+                f"🎬 Botga xush kelibsiz!\n🆔 Sizning ID: <code>{user_id}</code>\nKod kiriting:",
+                reply_markup=kb,
+                parse_mode="HTML"
+            )
     except Exception as e:
         print(f"[menu] {user_id} -> {e}")
-
 
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
 async def check_subscription_callback(call: CallbackQuery):
