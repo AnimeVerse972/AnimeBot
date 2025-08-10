@@ -79,14 +79,21 @@ class PostStates(StatesGroup):
 
 async def get_unsubscribed_channels(user_id):
     unsubscribed = []
+    
     for channel in CHANNELS:
         ch = channel.strip()
         try:
+            # Agar private link bo‘lsa
             if ch.startswith("https://t.me/+"):
-                chat = await bot.get_chat(ch)  # Private linkdan chat objesini olamiz
-                chat_id = chat.id
+                try:
+                    chat = await bot.get_chat(ch)  # bot shu kanalga admin bo‘lishi kerak
+                    chat_id = chat.id
+                except Exception as e:
+                    print(f"❗ Private kanal ID sini olishda xato: {ch} -> {e}")
+                    unsubscribed.append(ch)
+                    continue
             else:
-                chat_id = ch
+                chat_id = ch  # public username yoki chat_id
             member = await bot.get_chat_member(chat_id, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 unsubscribed.append(ch)
