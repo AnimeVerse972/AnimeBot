@@ -49,7 +49,7 @@ async def init_db():
 
     # RAM cache yangilash
     admins = await Admin.all().values_list("user_id", flat=True)
-    ADMINS_CACHE = set(admins))
+    ADMINS_CACHE = set(admins)
 
 
 # ==== FUNKSIYALAR ====
