@@ -1,6 +1,5 @@
 # database.py
 import os
-import ssl
 from dotenv import load_dotenv
 from tortoise import Tortoise, fields
 from tortoise.models import Model
@@ -34,18 +33,15 @@ async def init_db():
     global ADMINS_CACHE
 
     db_url = os.getenv("DATABASE_URL")
-
-    # Neon.tech SSL sozlamalari
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgres+asyncpg://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgres+asyncpg://", 1)
 
     await Tortoise.init(
-        db_url=db_url.replace("postgresql://", "postgres://", 1),
-        modules={"models": ["database"]},
-        connection_params={"ssl": ssl_context}
+        db_url=db_url,
+        modules={"models": ["database"]}
     )
-
     await Tortoise.generate_schemas()
 
     # Default adminlar qo‘shish
@@ -56,7 +52,6 @@ async def init_db():
     # RAM cache yangilash
     admins = await Admin.all().values_list("user_id", flat=True)
     ADMINS_CACHE = set(admins)
-    print("Database connected ✅")
 
 
 # ==== FUNKSIYALAR ====
