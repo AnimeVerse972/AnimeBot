@@ -80,13 +80,19 @@ class PostStates(StatesGroup):
 async def get_unsubscribed_channels(user_id):
     unsubscribed = []
     for channel in CHANNELS:
+        ch = channel.strip()
         try:
-            member = await bot.get_chat_member(channel.strip(), user_id)
+            if ch.startswith("https://t.me/+"):
+                chat = await bot.get_chat(ch)  # Private linkdan chat objesini olamiz
+                chat_id = chat.id
+            else:
+                chat_id = ch
+            member = await bot.get_chat_member(chat_id, user_id)
             if member.status not in ["member", "administrator", "creator"]:
-                unsubscribed.append(channel)
+                unsubscribed.append(ch)
         except Exception as e:
-            print(f"❗ Obuna tekshirishda xatolik: {channel} -> {e}")
-            unsubscribed.append(channel)
+            print(f"❗ Obuna tekshirishda xatolik: {ch} -> {e}")
+            unsubscribed.append(ch)
     return unsubscribed
 
 async def is_user_subscribed(user_id):
@@ -105,24 +111,23 @@ async def make_full_subscribe_markup(code):
     for ch in CHANNELS:
         ch = ch.strip()
         try:
-            chat = await bot.get_chat(ch)
-            invite_link = chat.invite_link or await bot.export_chat_invite_link(chat.id)
-            title = chat.title or ch
+            if ch.startswith("https://t.me/+"):
+                chat = await bot.get_chat(ch)
+                invite_link = ch  # allaqachon private link
+                title = chat.title or "Zayafka"
+            else:
+                chat = await bot.get_chat(ch)
+                invite_link = chat.invite_link or await bot.export_chat_invite_link(chat.id)
+                title = chat.title or ch
             markup.add(InlineKeyboardButton(f"➕ {title}", url=invite_link))
         except Exception as e:
             print(f"❗ Kanal linkini olishda xatolik: {ch} -> {e}")
-    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
+    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
     return markup
-
-from aiogram import types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-# konkurs.py dan:
-# from konkurs import load_participants, save_participants, ensure_dirs
 
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
-    # get_args() aiogram 2.25 da bor; None bo‘lsa bo‘sh qatorga tushirsin
     args = (message.get_args() or "").strip()
 
     # 0) Userni ro‘yxatga olish (sening funksiyang)
@@ -197,13 +202,14 @@ async def check_subscription_callback(call: CallbackQuery):
         markup = InlineKeyboardMarkup(row_width=1)
         for ch in unsubscribed:
             try:
-                channel = await bot.get_chat(ch.strip())
-                invite_link = channel.invite_link or (await channel.export_invite_link())
-                markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
+                chat = await bot.get_chat(ch)
+                invite_link = chat.invite_link or await bot.export_chat_invite_link(chat.id)
+                title = chat.title or ch
+                markup.add(InlineKeyboardButton(f"➕ {title}", url=invite_link))
             except Exception as e:
                 print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
         markup.add(InlineKeyboardButton("✅ Yana tekshirish", callback_data=f"checksub:{code}"))
-        await call.message.edit_text("❗ Obuna bo‘lmagan kanal(lar):", reply_markup=markup)
+        await call.message.edit_text("❗ Quyidagi kanallarga obuna bo‘ling:", reply_markup=markup)
     else:
         await call.message.delete()
         await send_reklama_post(call.from_user.id, code)
