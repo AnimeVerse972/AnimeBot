@@ -31,8 +31,13 @@ class Admin(Model):
 # ==== INIT DB ====
 async def init_db():
     global ADMINS_CACHE
+
+    db_url = os.getenv("DATABASE_URL")
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgres+asyncpg://", 1)
+
     await Tortoise.init(
-        db_url=os.getenv("DATABASE_URL"),
+        db_url=db_url,
         modules={"models": ["database"]}
     )
     await Tortoise.generate_schemas()
@@ -44,7 +49,7 @@ async def init_db():
 
     # RAM cache yangilash
     admins = await Admin.all().values_list("user_id", flat=True)
-    ADMINS_CACHE = set(admins)
+    ADMINS_CACHE = set(admins))
 
 
 # ==== FUNKSIYALAR ====
