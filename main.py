@@ -752,10 +752,14 @@ async def delete_code_handler(message: types.Message, state: FSMContext):
     else:
         await message.answer("❌ Kod topilmadi yoki o‘chirib bo‘lmadi.")
 
-async def on_startup(dp):
+async def on_startup(dispatcher):
     await init_db()
-    register_konkurs_handlers(dp, bot, ADMINS)
-    print("✅ PostgreSQL bazaga ulandi!")
+    print("Database connected ✅")
 
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)    
+async def on_shutdown(dispatcher):
+    from tortoise import Tortoise
+    await Tortoise.close_connections()
+    print("Database closed ❌")
+
+if __name__ == '__main__':
+    executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown)
