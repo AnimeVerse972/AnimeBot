@@ -1,119 +1,154 @@
 # database.py
+import asyncpg
 import os
 from dotenv import load_dotenv
-from tortoise import Tortoise, fields
-from tortoise.models import Model
 
 load_dotenv()
 
-ADMINS_CACHE = set()  # RAM cache
+db_pool = None
+ADMINS_CACHE = set()  # RAM da adminlar
 
-# ==== MODELLAR ====
-
-class User(Model):
-    user_id = fields.BigIntField(pk=True)
-
-class KinoCode(Model):
-    code = fields.CharField(max_length=255, pk=True)
-    channel = fields.CharField(max_length=255, null=True)
-    message_id = fields.IntField(null=True)
-    post_count = fields.IntField(default=0)
-    title = fields.CharField(max_length=255, null=True)
-
-class Stats(Model):
-    code = fields.CharField(max_length=255, pk=True)
-    searched = fields.IntField(default=0)
-
-class Admin(Model):
-    user_id = fields.BigIntField(pk=True)
-
-
-# ==== INIT DB ====
+# === Foydalanuvchilar jadvali ===
 async def init_db():
-    global ADMINS_CACHE
+    global db_pool, ADMINS_CACHE
+    db_pool = await asyncpg.create_pool(os.getenv("DATABASE_URL"))
 
-    db_url = os.getenv("DATABASE_URL")
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgres+asyncpg://", 1)
-    elif db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgres+asyncpg://", 1)
+    async with db_pool.acquire() as conn:
+        # Jadvallar
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id BIGINT PRIMARY KEY
+            );
+            CREATE TABLE IF NOT EXISTS kino_codes (
+                code TEXT PRIMARY KEY,
+                channel TEXT,
+                message_id INTEGER,
+                post_count INTEGER,
+                title TEXT
+            );
+            CREATE TABLE IF NOT EXISTS stats (
+                code TEXT PRIMARY KEY,
+                searched INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS admins (
+                user_id BIGINT PRIMARY KEY
+            );
+        """)
 
-    await Tortoise.init(
-        db_url=db_url,
-        modules={"models": ["database"]}
-    )
-    await Tortoise.generate_schemas()
+        # Adminlarni yuklash
+        default_admins = [6486825926, 7711928526]
+        await conn.executemany(
+            "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            [(admin_id,) for admin_id in default_admins]
+        )
+        rows = await conn.fetch("SELECT user_id FROM admins")
+        ADMINS_CACHE = {row["user_id"] for row in rows}
 
-    # Default adminlar qo‘shish
-    default_admins = [6486825926, 7711928526]
-    for admin_id in default_admins:
-        await Admin.get_or_create(user_id=admin_id)
-
-    # RAM cache yangilash
-    admins = await Admin.all().values_list("user_id", flat=True)
-    ADMINS_CACHE = set(admins)
-
-
-# ==== FUNKSIYALAR ====
-
+# === Foydalanuvchi qo'shish ===
 async def add_user(user_id):
-    await User.get_or_create(user_id=user_id)
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT DO NOTHING", user_id
+        )
 
+# === Foydalanuvchilar soni ===
 async def get_user_count():
-    return await User.all().count()
+    async with db_pool.acquire() as conn:
+        return (await conn.fetchval("SELECT COUNT(*) FROM users"))
 
+# === Kod qo‘shish ===
 async def add_kino_code(code, channel, message_id, post_count, title):
-    await KinoCode.update_or_create(
-        defaults={
-            "channel": channel,
-            "message_id": message_id,
-            "post_count": post_count,
-            "title": title
-        },
-        code=code
-    )
-    await Stats.get_or_create(code=code)
+    async with db_pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO kino_codes (code, channel, message_id, post_count, title)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (code) DO UPDATE SET
+                channel = EXCLUDED.channel,
+                message_id = EXCLUDED.message_id,
+                post_count = EXCLUDED.post_count,
+                title = EXCLUDED.title;
+        """, code, channel, message_id, post_count, title)
+        await conn.execute("""
+            INSERT INTO stats (code) VALUES ($1)
+            ON CONFLICT DO NOTHING
+        """, code)
 
+# === Kodni olish ===
 async def get_kino_by_code(code):
-    kino = await KinoCode.filter(code=code).first()
-    return kino.__dict__ if kino else None
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT code, channel, message_id, post_count, title
+            FROM kino_codes
+            WHERE code = $1
+        """, code)
+        return dict(row) if row else None
 
+# === Barcha kodlarni olish ===
 async def get_all_codes():
-    return await KinoCode.all().values("code", "title")
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT code, title FROM kino_codes")
+        return [{"code": r["code"], "title": r["title"]} for r in rows]
 
+# === Kodni o'chirish ===
 async def delete_kino_code(code):
-    await Stats.filter(code=code).delete()
-    deleted_count = await KinoCode.filter(code=code).delete()
-    return deleted_count > 0
+    async with db_pool.acquire() as conn:
+        result = await conn.execute("""
+            BEGIN;
+            DELETE FROM stats WHERE code = $1;
+            DELETE FROM kino_codes WHERE code = $1;
+            COMMIT;
+        """, code)
+        return "DELETE" in result  # natija qaytadi
 
+# === Statistika yangilash ===
 async def increment_stat(code, field):
     if field not in ("searched", "init"):
         return
-    if field == "init":
-        await Stats.get_or_create(code=code)
-    else:
-        await Stats.filter(code=code).update(
-            **{field: fields.F(field) + 1}
-        )
+    async with db_pool.acquire() as conn:
+        if field == "init":
+            await conn.execute(
+                "INSERT INTO stats (code, searched) VALUES ($1, 0) ON CONFLICT DO NOTHING",
+                code
+            )
+        else:
+            await conn.execute(
+                f"UPDATE stats SET {field} = {field} + 1 WHERE code = $1", code
+            )
 
+# === Kod statistikasi olish ===
 async def get_code_stat(code):
-    return await Stats.filter(code=code).first()
+    async with db_pool.acquire() as conn:
+        return await conn.fetchrow("SELECT searched FROM stats WHERE code = $1", code)
 
+# === Kod va nomni yangilash ===
 async def update_anime_code(old_code, new_code, new_title):
-    await KinoCode.filter(code=old_code).update(code=new_code, title=new_title)
+    async with db_pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE kino_codes SET code = $1, title = $2 WHERE code = $3
+        """, new_code, new_title, old_code)
 
+# === Barcha foydalanuvchi IDlarini olish ===
 async def get_all_user_ids():
-    return await User.all().values_list("user_id", flat=True)
+    async with db_pool.acquire() as conn:
+        return [r["user_id"] for r in await conn.fetch("SELECT user_id FROM users")]
 
+# === Admin RAM dan olish ===
 def get_all_admins():
     return ADMINS_CACHE
 
+# === Admin qo'shish ===
 async def add_admin(user_id: int):
     global ADMINS_CACHE
-    await Admin.get_or_create(user_id=user_id)
     ADMINS_CACHE.add(user_id)
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            user_id
+        )
 
+# === Adminni o'chirish ===
 async def remove_admin(user_id: int):
     global ADMINS_CACHE
-    await Admin.filter(user_id=user_id).delete()
     ADMINS_CACHE.discard(user_id)
+    async with db_pool.acquire() as conn:
+        await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
