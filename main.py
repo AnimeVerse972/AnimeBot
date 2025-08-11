@@ -423,28 +423,24 @@ async def dump_database_handler(message: types.Message):
         users_text = ", ".join(normalized_user_ids) if normalized_user_ids else "Foydalanuvchilar yo'q"
 
         # 2) Kodlar
-        codes = await get_all_codes()  # kutilayotgan: liste of dicts {'code','channel','message_id','post_count','title'}
+        codes = await get_all_codes()  # kutilyapti: list of dicts yoki list of tuples
         codes_lines = []
+
         for row in codes:
-            # row dict yoki tuple/tuple-like bo'lishi mumkin; safe olish:
             if isinstance(row, dict):
-                code = row.get("code") or row.get("kod") or row.get("id") or ""
-                channel = row.get("channel") or row.get("server_channel") or row.get("kanal") or row.get("channel_username") or ""
-                message_id = row.get("message_id") or row.get("reklama_id") or row.get("msg_id") or row.get("message") or ""
-                post_count = row.get("post_count") or row.get("qism") or row.get("parts") or ""
-                title = row.get("title") or row.get("name") or row.get("nom") or ""
+                code = row.get("code", "")
+                channel = row.get("channel", "")
+                message_id = row.get("message_id", "")
+                post_count = row.get("post_count", "")
+                title = row.get("title", "")
             else:
-                # tuple yoki list — faraz: (code, channel, message_id, post_count, title)
+                # Tuple yoki list holati
                 try:
-                    code, channel, message_id, post_count, title = (row + [""] * 5)[:5]
+                    code, channel, message_id, post_count, title = (list(row) + [""] * 5)[:5]
                 except Exception:
-                    # fallback: stringify whole row
                     codes_lines.append(" ".join(map(str, row)))
                     continue
-
-            # Agar message_id raqam bo'lsa, agar saqlangan format reklama_id = db dagi message_id - 1 kabi bo'lsa,
-            # adminlar uchun ko'rsatishda asl reklama_id ni (message_id - 1) emas oddiy qaytargan ma'qul.
-            # (Sening kodda add_kino_code da reklama_id + 1 saqlanayotgan joylar bor, shuning uchun yozamiz qoldir)
+    
             codes_lines.append(f"{code} {channel} {message_id} {post_count} {title}")
 
         codes_text = "\n".join(codes_lines) if codes_lines else "Kodlar yo'q"
