@@ -1,29 +1,24 @@
+# === 📦 Standart kutubxonalar ===
 import os
+import asyncio
+
+# === 🔧 Konfiguratsiya va sozlamalar ===
 from dotenv import load_dotenv
+
+# === 🤖 Aiogram kutubxonalari ===
 from aiogram import Bot, Dispatcher, types
-from konkurs import register_konkurs_handlers
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import (
-    ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-)
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils import executor
+from aiogram.utils.exceptions import RetryAfter, BotBlocked, ChatNotFound
+
+# === 📂 Loyihaga tegishli modullar ===
+from konkurs import register_konkurs_handlers
 from keep_alive import keep_alive
-from database import (
-    init_db,
-    add_user,
-    get_user_count,
-    add_kino_code,
-    get_kino_by_code,
-    get_all_codes,
-    delete_kino_code,
-    get_code_stat,
-    increment_stat,
-    get_all_user_ids,
-    update_anime_code
-)
+from database import init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code
+
 
 load_dotenv()
 keep_alive()
@@ -506,7 +501,6 @@ async def handle_code_message(message: types.Message):
         await increment_stat(code, "searched")
         await send_reklama_post(message.from_user.id, code)
 
-# === 📢 Habar yuborish
 @dp.message_handler(lambda m: m.text == "📢 Habar yuborish")
 async def ask_broadcast_info(message: types.Message):
     if message.from_user.id not in ADMINS:
@@ -528,12 +522,12 @@ async def send_forward_only(message: types.Message, state: FSMContext):
         return
 
     msg_id = int(msg_id)
-    users = await get_all_user_ids()  # Foydalanuvchilar ro‘yxati
+    users = await get_all_user_ids()
 
     success = 0
     fail = 0
 
-    for user_id in users:
+    for i, user_id in enumerate(users, start=1):
         try:
             await bot.forward_message(
                 chat_id=user_id,
@@ -541,9 +535,19 @@ async def send_forward_only(message: types.Message, state: FSMContext):
                 message_id=msg_id
             )
             success += 1
-        except Exception as e:
-            print(f"Xatolik {user_id} uchun: {e}")
+        except RetryAfter as e:
+            print(f"Flood limit. Kutyapmiz {e.timeout} sekund...")
+            await asyncio.sleep(e.timeout)
+            continue
+        except (BotBlocked, ChatNotFound):
             fail += 1
+        except Exception as e:
+            print(f"Xatolik {user_id}: {e}")
+            fail += 1
+
+        # Har 25 xabardan keyin 1 sekund kutish
+        if i % 25 == 0:
+            await asyncio.sleep(1)
 
     await message.answer(f"✅ Yuborildi: {success} ta\n❌ Xatolik: {fail} ta")
 
