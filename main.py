@@ -1,4 +1,5 @@
 # === 📦 Standart kutubxonalar ===
+import io
 import os
 import asyncio
 
@@ -168,6 +169,7 @@ async def start_handler(message: types.Message):
             kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
             kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
             kb.add("📥 User qo‘shish")
+            kb.add("📦 Bazani olish")
             await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{user_id}</code>", reply_markup=kb, parse_mode="HTML")
         else:
             kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -394,6 +396,76 @@ async def add_users_process(message: types.Message, state: FSMContext):
             errors += 1
 
     await message.answer(f"✅ Qo‘shildi: {added} ta\n❌ Xato: {errors} ta")
+
+@dp.message_handler(lambda m: m.text == "📦 Bazani olish", user_id=ADMINS)
+async def dump_database_handler(message: types.Message):
+    # Faqat adminlar uchun (decorator da ham cheklangan)
+    try:
+        # 1) Users
+        users = await get_all_user_ids()  # kutilayotgan: [1,2,3] yoki [{'user_id':1}, ...]
+        # Normalize qilish — turli qaytish turlariga moslashamiz
+        normalized_user_ids = []
+        for u in users:
+            if isinstance(u, dict):
+                # misol: {'user_id': 123}
+                if 'user_id' in u:
+                    normalized_user_ids.append(str(u['user_id']))
+                else:
+                    # agar butunlay notanish dict bo'lsa, stringify qilamiz
+                    normalized_user_ids.append(str(next(iter(u.values()))))
+            else:
+                # int yoki str yoki tuple
+                if isinstance(u, (list, tuple)) and len(u) > 0:
+                    normalized_user_ids.append(str(u[0]))
+                else:
+                    normalized_user_ids.append(str(u))
+
+        users_text = ", ".join(normalized_user_ids) if normalized_user_ids else "Foydalanuvchilar yo'q"
+
+        # 2) Kodlar
+        codes = await get_all_codes()  # kutilayotgan: liste of dicts {'code','channel','message_id','post_count','title'}
+        codes_lines = []
+        for row in codes:
+            # row dict yoki tuple/tuple-like bo'lishi mumkin; safe olish:
+            if isinstance(row, dict):
+                code = row.get("code") or row.get("kod") or row.get("id") or ""
+                channel = row.get("channel") or row.get("server_channel") or row.get("kanal") or row.get("channel_username") or ""
+                message_id = row.get("message_id") or row.get("reklama_id") or row.get("msg_id") or row.get("message") or ""
+                post_count = row.get("post_count") or row.get("qism") or row.get("parts") or ""
+                title = row.get("title") or row.get("name") or row.get("nom") or ""
+            else:
+                # tuple yoki list — faraz: (code, channel, message_id, post_count, title)
+                try:
+                    code, channel, message_id, post_count, title = (row + [""] * 5)[:5]
+                except Exception:
+                    # fallback: stringify whole row
+                    codes_lines.append(" ".join(map(str, row)))
+                    continue
+
+            # Agar message_id raqam bo'lsa, agar saqlangan format reklama_id = db dagi message_id - 1 kabi bo'lsa,
+            # adminlar uchun ko'rsatishda asl reklama_id ni (message_id - 1) emas oddiy qaytargan ma'qul.
+            # (Sening kodda add_kino_code da reklama_id + 1 saqlanayotgan joylar bor, shuning uchun yozamiz qoldir)
+            codes_lines.append(f"{code} {channel} {message_id} {post_count} {title}")
+
+        codes_text = "\n".join(codes_lines) if codes_lines else "Kodlar yo'q"
+
+        # 3) Yuborish — agar juda uzun bo'lsa, fayl sifatida yuboramiz
+        MAX_LEN = 3900  # xavfsiz limit
+        if len(users_text) > MAX_LEN or len(codes_text) > MAX_LEN:
+            bio = io.BytesIO()
+            bio.name = "database_dump.txt"
+            dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}\n"
+            bio.write(dump_content.encode("utf-8"))
+            bio.seek(0)
+            await message.answer("📦 Bazaning natijasi juda uzun — fayl sifatida yuborilmoqda.")
+            await message.answer_document(types.InputFile(bio, filename="database_dump.txt"))
+        else:
+            await message.answer(f"📋 *Users IDlari:*\n`{users_text}`", parse_mode="Markdown")
+            await message.answer(f"🎬 *Kodlar:*\n```\n{codes_text}\n```", parse_mode="Markdown")
+    except Exception as e:
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
+        print(f"[dump_database_handler] Error: {e}")
+
 
 # === Admin qo'shish===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
