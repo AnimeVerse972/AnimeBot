@@ -399,58 +399,44 @@ async def add_users_process(message: types.Message, state: FSMContext):
 
 @dp.message_handler(lambda m: m.text == "📦 Bazani olish", user_id=ADMINS)
 async def dump_database_handler(message: types.Message):
-    # Faqat adminlar uchun (decorator da ham cheklangan)
     try:
-        # 1) Users
-        users = await get_all_user_ids()  # kutilayotgan: [1,2,3] yoki [{'user_id':1}, ...]
-        # Normalize qilish — turli qaytish turlariga moslashamiz
+        # 1️⃣ Users IDs olish
+        users = await get_all_user_ids()  # Kutilgan: [1,2,3] yoki [{'user_id':1}, ...]
         normalized_user_ids = []
         for u in users:
             if isinstance(u, dict):
-                # misol: {'user_id': 123}
-                if 'user_id' in u:
-                    normalized_user_ids.append(str(u['user_id']))
-                else:
-                    # agar butunlay notanish dict bo'lsa, stringify qilamiz
-                    normalized_user_ids.append(str(next(iter(u.values()))))
+                normalized_user_ids.append(str(u.get('user_id', next(iter(u.values()), ''))))
+            elif isinstance(u, (list, tuple)) and u:
+                normalized_user_ids.append(str(u[0]))
             else:
-                # int yoki str yoki tuple
-                if isinstance(u, (list, tuple)) and len(u) > 0:
-                    normalized_user_ids.append(str(u[0]))
-                else:
-                    normalized_user_ids.append(str(u))
+                normalized_user_ids.append(str(u))
 
         users_text = ", ".join(normalized_user_ids) if normalized_user_ids else "Foydalanuvchilar yo'q"
 
-        # 2) Kodlar
-        codes = await get_all_codes()  # kutilyapti: list of dicts yoki list of tuples
+        # 2️⃣ Kodlar olish va formatlash
+        codes = await get_all_codes()  # Kutilgan: [{'code','kanal_id','reklamapost_id','qism','nom'}, ...]
         codes_lines = []
 
         for row in codes:
             if isinstance(row, dict):
                 code = row.get("code", "")
-                channel = row.get("channel", "")
-                message_id = row.get("message_id", "")
-                post_count = row.get("post_count", "")
-                title = row.get("title", "")
+                kanal_id = row.get("kanal_id", "")
+                reklamapost_id = row.get("reklamapost_id", "")
+                qism = row.get("qism", "")
+                nom = row.get("nom", "")
             else:
-                # Tuple yoki list holati
-                try:
-                    code, channel, message_id, post_count, title = (list(row) + [""] * 5)[:5]
-                except Exception:
-                    codes_lines.append(" ".join(map(str, row)))
-                    continue
-    
-            codes_lines.append(f"{code} {channel} {message_id} {post_count} {title}")
+                # Tuple yoki list
+                code, kanal_id, reklamapost_id, qism, nom = (list(row) + [""] * 5)[:5]
+
+            codes_lines.append(f"{code} {kanal_id} {reklamapost_id} {qism} {nom}")
 
         codes_text = "\n".join(codes_lines) if codes_lines else "Kodlar yo'q"
 
-        # 3) Yuborish — agar juda uzun bo'lsa, fayl sifatida yuboramiz
-        MAX_LEN = 3900  # xavfsiz limit
-        if len(users_text) > MAX_LEN or len(codes_text) > MAX_LEN:
+        # 3️⃣ Yuborish — uzun bo‘lsa fayl sifatida
+        dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}"
+        if len(dump_content) > 3900:
             bio = io.BytesIO()
             bio.name = "database_dump.txt"
-            dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}\n"
             bio.write(dump_content.encode("utf-8"))
             bio.seek(0)
             await message.answer("📦 Bazaning natijasi juda uzun — fayl sifatida yuborilmoqda.")
@@ -458,11 +444,11 @@ async def dump_database_handler(message: types.Message):
         else:
             await message.answer(f"📋 *Users IDlari:*\n`{users_text}`", parse_mode="Markdown")
             await message.answer(f"🎬 *Kodlar:*\n```\n{codes_text}\n```", parse_mode="Markdown")
+
     except Exception as e:
         await message.answer(f"❌ Xatolik yuz berdi: {e}")
         print(f"[dump_database_handler] Error: {e}")
-
-
+        
 # === Admin qo'shish===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
 async def add_admin_start(message: types.Message):
