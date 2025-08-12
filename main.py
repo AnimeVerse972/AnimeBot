@@ -18,7 +18,7 @@ from aiogram.utils.exceptions import RetryAfter, BotBlocked, ChatNotFound
 # === 📂 Loyihaga tegishli modullar ===
 from konkurs import register_konkurs_handlers
 from keep_alive import keep_alive
-from database import init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code
+from database import init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code, add_channel_to_db, remove_channel_from_db, get_all_channels
 
 
 load_dotenv()
@@ -72,6 +72,10 @@ class PostStates(StatesGroup):
     waiting_for_image = State()
     waiting_for_title = State()
     waiting_for_link = State()
+
+class ChannelStates(StatesGroup):
+    waiting_for_add_channel = State()
+    waiting_for_remove_channel = State()
 
 async def get_unsubscribed_channels(user_id):
     unsubscribed = []
@@ -163,7 +167,7 @@ async def start_handler(message: types.Message):
             kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
             kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
             kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
-            kb.add("📥 User qo‘shish")
+            kb.add("📥 User qo‘shish", "📢 Kanallar")
             kb.add("📦 Bazani olish")
             await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{user_id}</code>", reply_markup=kb, parse_mode="HTML")
         else:
@@ -283,6 +287,82 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
         await message.answer(f"❌ Xatolik: {e}")
     finally:
         await state.finish()
+
+@dp.message_handler(lambda m: m.text == "📢 Kanallar", user_id=ADMINS)
+async def manage_channels(message: types.Message):
+    kb = (
+        InlineKeyboardMarkup(row_width=1)
+        .add(InlineKeyboardButton("➕ Kanal qo‘shish", callback_data="add_channel"))
+        .add(InlineKeyboardButton("➖ Kanal o‘chirish", callback_data="remove_channel"))
+        .add(InlineKeyboardButton("📋 Kanallar ro‘yxati", callback_data="list_channels"))
+    )
+    await message.answer(
+        "📢 Kanallar boshqaruvi:\n\n"
+        "➕ – Yangi kanal qo‘shish\n"
+        "➖ – Kanalni o‘chirish\n"
+        "📋 – Barcha kanallarni ko‘rish",
+        reply_markup=kb
+    )
+
+@dp.callback_query_handler(lambda c: c.data == "add_channel", user_id=ADMINS)
+async def ask_add_channel(callback: CallbackQuery, state: FSMContext):
+    await ChannelStates.waiting_for_add_channel.set()
+    await callback.message.edit_text("➕ Kanal username yoki ID ni yuboring:\nMasalan: @mychannel")
+    await callback.answer()
+
+@dp.message_handler(state=ChannelStates.waiting_for_add_channel, user_id=ADMINS)
+async def add_channel(message: types.Message, state: FSMContext):
+    channel = message.text.strip()
+    try:
+        chat = await bot.get_chat(channel)
+        await add_channel_to_db(chat.id, chat.title, chat.username)
+        await message.answer(f"✅ Kanal qo‘shildi: {chat.title}")
+    except Exception as e:
+        await message.answer("❌ Kanal topilmadi yoki botga admin qilinmagan.")
+    await state.finish()
+
+@dp.callback_query_handler(lambda c: c.data == "remove_channel", user_id=ADMINS)
+async def ask_remove_channel(callback: CallbackQuery, state: FSMContext):
+    await ChannelStates.waiting_for_remove_channel.set()
+    channels = await get_all_channels()
+    if not channels:
+        await callback.message.edit_text("❌ Hozircha kanallar yo‘q.")
+        return
+
+    kb = InlineKeyboardMarkup(row_width=1)
+    for ch in channels:
+        kb.add(InlineKeyboardButton(ch["title"], callback_data=f"del_{ch['id']}"))
+    kb.add(InlineKeyboardButton("⬅️ Ortga", callback_data="back_channels"))
+    await callback.message.edit_text("➖ O‘chirmoqchi bo‘lgan kanalni tanlang:", reply_markup=kb)
+    await callback.answer()
+
+@dp.callback_query_handler(lambda c: c.data.startswith("del_"), user_id=ADMINS)
+async def confirm_remove_channel(callback: CallbackQuery):
+    channel_id = int(callback.data.split("_")[1])
+    await remove_channel_from_db(channel_id)
+    await callback.message.edit_text("✅ Kanal o‘chirildi.")
+
+@dp.callback_query_handler(lambda c: c.data == "list_channels", user_id=ADMINS)
+async def list_channels(callback: CallbackQuery):
+    channels = await get_all_channels()
+    if not channels:
+        await callback.message.edit_text("❌ Hozircha kanallar yo‘q.")
+        return
+
+    text = "📋 Barcha kanallar:\n\n"
+    for ch in channels:
+        text += f"📢 `{ch['username']}` – {ch['title']}\n"
+
+    kb = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("⬅️ Ortga", callback_data="back_channels")
+    )
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+    await callback.answer()
+
+@dp.callback_query_handler(lambda c: c.data == "back_channels", user_id=ADMINS)
+async def back_to_channels(callback: CallbackQuery):
+    await manage_channels(callback.message)
+    await callback.answer()
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
