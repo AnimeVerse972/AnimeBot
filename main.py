@@ -62,6 +62,21 @@ async def is_user_subscribed(user_id: int) -> bool:
             return False
     return True
 
+async def send_promo_to_channel(target_channel: str, server_channel: str, msg_id: int, code: str):
+    """Reklama postini target_channel ga yuboradi."""
+    download_btn = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("📥 Yuklab olish", url=f"https://t.me/{BOT_USERNAME}?start={code}")
+    )
+    try:
+        await bot.copy_message(
+            chat_id=target_channel,
+            from_chat_id=server_channel,
+            message_id=msg_id,
+            reply_markup=download_btn
+        )
+    except Exception as e:
+        print(f"❌ Promo yuborishda xatolik: {e}")
+
 async def make_subscribe_markup(code: str):
     channels = await get_channels_list()
     kb = InlineKeyboardMarkup(row_width=1)
