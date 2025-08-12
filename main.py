@@ -109,12 +109,7 @@ async def make_full_subscribe_markup(code):
             print(f"❗ Kanal linkini olishda xatolik: {ch} -> {e}")
     markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return markup
-
-from aiogram import types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-# konkurs.py dan:
-# from konkurs import load_participants, save_participants, ensure_dirs
-
+    
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
@@ -185,26 +180,45 @@ async def start_handler(message: types.Message):
     except Exception as e:
         print(f"[menu] {user_id} -> {e}")
 
-@dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
-async def check_subscription_callback(call: CallbackQuery):
-    code = call.data.split(":")[1]
-    unsubscribed = await get_unsubscribed_channels(call.from_user.id)
+@dp.callback_query_handler(lambda c: c.data.startswith("check_sub:"))
+async def check_subscription(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    args = callback_query.data.split("check_sub:")[1]  # kod bo‘lishi mumkin
+    bot_info = await bot.get_me()
 
-    if unsubscribed:
-        markup = InlineKeyboardMarkup(row_width=1)
-        for ch in unsubscribed:
-            try:
-                channel = await bot.get_chat(ch.strip())
-                invite_link = channel.invite_link or (await channel.export_invite_link())
-                markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
-            except Exception as e:
-                print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
-        markup.add(InlineKeyboardButton("✅ Yana tekshirish", callback_data=f"checksub:{code}"))
-        await call.message.edit_text("❗ Obuna bo‘lmagan kanal(lar):", reply_markup=markup)
+    # Kanal ro‘yxati — ENV dan yoki kod ichidan olasan
+    channels = MAIN_CHANNELS  # list: ['@kanal1', '@kanal2', ...]
+
+    not_subscribed = []
+    for channel in channels:
+        try:
+            member = await bot.get_chat_member(channel, user_id)
+            if member.status not in ("member", "administrator", "creator"):
+                not_subscribed.append(channel)
+        except Exception:
+            not_subscribed.append(channel)
+
+    if not_subscribed:
+        # Obuna bo‘lmagan foydalanuvchi
+        kb = InlineKeyboardMarkup()
+        for ch in channels:
+            kb.add(InlineKeyboardButton(f"🔗 {ch}", url=f"https://t.me/{ch.lstrip('@')}"))
+        kb.add(InlineKeyboardButton("✅ Obunani tekshirish", callback_data=f"check_sub:{args}"))
+
+        await callback_query.message.edit_text(
+            "❗ Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:",
+            reply_markup=kb
+        )
+        return
+
+    # Agar foydalanuvchi obuna bo‘lsa
+    if args:
+        # Bu yerda kod kiritilgan bo‘lishi mumkin, masalan anime qidirish
+        # send_anime_by_code(args, user_id) funksiyani chaqirasan
+        await callback_query.message.edit_text(f"✅ Kod topildi: {args}")
     else:
-        await call.message.delete()
-        await send_reklama_post(call.from_user.id, code)
-        await increment_stat(code, "searched")
+        await callback_query.message.edit_text("✅ Obuna tasdiqlandi!")
+
         
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
