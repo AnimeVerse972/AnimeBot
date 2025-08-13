@@ -25,6 +25,8 @@ load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
+CHANNELS = os.getenv("CHANNEL_USERNAMES").split(",")
+MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
 bot = Bot(token=API_TOKEN)
@@ -43,51 +45,6 @@ async def make_subscribe_markup(code):
     return keyboard
 
 ADMINS = {6486825926}
-
-# ------------------------------------------------------------------
-# 🔐 Mandatory subscription – from database
-# ------------------------------------------------------------------
-async def get_channels_list():
-    channels = await get_all_channels()
-    return [f"@{ch['username']}" for ch in channels if ch['username']]
-
-async def is_user_subscribed(user_id: int) -> bool:
-    channels = await get_channels_list()
-    for ch in channels:
-        try:
-            member = await bot.get_chat_member(ch, user_id)
-            if member.status not in {"member", "administrator", "creator"}:
-                return False
-        except Exception:
-            return False
-    return True
-
-async def send_promo_to_channel(target_channel: str, server_channel: str, msg_id: int, code: str):
-    """Reklama postini target_channel ga yuboradi."""
-    download_btn = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("📥 Yuklab olish", url=f"https://t.me/{BOT_USERNAME}?start={code}")
-    )
-    try:
-        await bot.copy_message(
-            chat_id=target_channel,
-            from_chat_id=server_channel,
-            message_id=msg_id,
-            reply_markup=download_btn
-        )
-    except Exception as e:
-        print(f"❌ Promo yuborishda xatolik: {e}")
-
-async def make_subscribe_markup(code: str):
-    channels = await get_channels_list()
-    kb = InlineKeyboardMarkup(row_width=1)
-    for ch in channels:
-        try:
-            link = await bot.create_chat_invite_link(ch)
-            kb.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=link.invite_link))
-        except Exception as e:
-            print(f"❌ Link yaratishda xatolik: {ch} -> {e}")
-    kb.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
-    return kb
 
 class AdminStates(StatesGroup):
     waiting_for_kino_data = State()
@@ -120,6 +77,19 @@ class ChannelStates(StatesGroup):
     waiting_for_add_channel = State()
     waiting_for_remove_channel = State()
 
+# === OBUNA TEKSHIRISH FUNKSIYASI ===
+async def get_unsubscribed_channels(user_id):
+    unsubscribed = []
+    for channel in CHANNELS:
+        try:
+            member = await bot.get_chat_member(channel.strip(), user_id)
+            if member.status not in ["member", "administrator", "creator"]:
+                unsubscribed.append(channel)
+        except Exception as e:
+            print(f"❗ Obuna tekshirishda xatolik: {channel} -> {e}")
+            unsubscribed.append(channel)
+    return unsubscribed
+
 async def is_user_subscribed(user_id):
     for channel in CHANNELS:
         try:
@@ -130,6 +100,19 @@ async def is_user_subscribed(user_id):
             print(f"❗ Obuna holatini aniqlab bo‘lmadi: {channel} -> {e}")
             return False
     return True
+
+# === BARCHA KANALLAR UCHUN OBUNA MARKUP ===
+async def make_full_subscribe_markup(code):
+    markup = InlineKeyboardMarkup(row_width=1)
+    for ch in CHANNELS:
+        try:
+            channel = await bot.get_chat(ch.strip())
+            invite_link = channel.invite_link or (await channel.export_invite_link())
+            markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
+        except Exception as e:
+            print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
+    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
+    return markup
     
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
