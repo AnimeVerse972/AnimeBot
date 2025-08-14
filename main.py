@@ -725,7 +725,7 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     await message.answer(f"✅ Yangi kodlar qo‘shildi:\n\n✅ Muvaffaqiyatli: {successful}\n❌ Xatolik: {failed}")
     await state.finish()
     
-# === Kodlar ro‘yxati
+# === Kodlar ro‘yxat
 @dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
 async def kodlar(message: types.Message):
     kodlar = await get_all_codes()
@@ -733,16 +733,22 @@ async def kodlar(message: types.Message):
         await message.answer("⛔️ Hech qanday kod topilmadi.")
         return
 
-    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
+    # Kodlarni raqam bo‘yicha saralash
     kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
 
+    # Matnni bo‘lish uchun vaqtinchalik buffer
     text = "📄 *Kodlar ro‘yxati:*\n\n"
-    for row in kodlar:
-        code = row["code"]
-        title = row["title"]
-        text += f"`{code}` - *{title}*\n"
+    MAX_LEN = 4000  # Markdown uchun xavfsiz limit
 
-    await message.answer(text)
+    for row in kodlar:
+        code = escape_md(str(row["code"]))
+        title = escape_md(str(row["title"]))
+        line = f"`{code}` - *{title}*\n"
+
+        # Agar qo‘shilsa limitdan oshsa, avvalgi qismini yuboramiz
+        if len(text) + len(line) > MAX_LEN:
+            await message.answer(text, parse_mode="MarkdownV2")
+            text = ""  # Yangi bo
         
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
