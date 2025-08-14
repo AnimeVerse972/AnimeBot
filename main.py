@@ -728,26 +728,21 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
 # === Kodlar ro‘yxati
 @dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
 async def kodlar(message: types.Message):
-    try:
-        kodlar = await get_all_codes()
-        print(kodlar)  # Kodlar ro'yxatini konsolga chiqarish
-        if not kodlar:
-            await message.answer("⛔️ Hech qanday kod topilmadi.")
-            return
+    kodlar = await get_all_codes()
+    if not kodlar:
+        await message.answer("⛔️ Hech qanday kod topilmadi.")
+        return
 
-        # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
-        kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
+    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
 
-        text = "📄 *Kodlar ro‘yxati:*\n\n"
-        for row in kodlar:
-            code = row["code"]
-            title = row["title"]
-            text += f"`{code}` - *{title}*\n"
+    text = "📄 *Kodlar ro‘yxati:*\n\n"
+    for row in kodlar:
+        code = row["code"]
+        title = row["title"]
+        text += f"`{code}` - *{title}*\n"
 
-        await message.answer(text, parse_mode="Markdown")
-    except Exception as e:
-        await message.answer(f"❌ Xatolik yuz berdi: {e}")
-        print(f"[kodlar] Xatolik: {e}")
+    await message.answer(text, parse_mode="Markdown")
         
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
