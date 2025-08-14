@@ -742,7 +742,7 @@ async def kodlar(message: types.Message):
         title = row["title"]
         text += f"`{code}` - *{title}*\n"
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text)
         
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
