@@ -768,23 +768,34 @@ async def kino_button(callback: types.CallbackQuery):
     await callback.answer()
 
 # === Kodlar ro‘yxati
-@dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
+@dp.message_handler(lambda m: m.text == "📄 Kodlar ro‘yxati")
 async def kodlar(message: types.Message):
     kodlar = await get_all_codes()
     if not kodlar:
-        await message.answer("⛔️ Hech qanday kod topilmadi.")
+        await message.answer("📂 Kodlar yo‘q.")
+        return
+    
+    # Kodlarni raqam bo‘yicha saralash
+    try:
+        kodlar = sorted(kodlar, key=lambda x: int(x["code"]) if isinstance(x, dict) else int(x[0]))
+    except Exception as e:
+        await message.answer(f"❌ Saralashda xatolik: {e}")
         return
 
-    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
-    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
-
-    text = "📄 *Kodlar ro‘yxati:*\n\n"
+    text = "📄 Kodlar:\n"
     for row in kodlar:
-        code = row["code"]
-        title = row["title"]
-        text += f"`{code}` - *{title}*\n"
+        if isinstance(row, dict):
+            code = row.get("code", "")
+            ch = row.get("channel", "")
+            msg_id = row.get("message_id", "")
+            count = row.get("post_count", "")
+            title = row.get("title", "")
+        else:  # tuple yoki list
+            code, ch, msg_id, count, title = (list(row) + [""] * 5)[:5]
+        
+        text += f"{code} {ch} {msg_id} {count} post {title}\n"
 
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(f"```\n{text}\n```", parse_mode="Markdown")
 
 @dp.message_handler(lambda m: m.text == "📢 Kanallar", user_id=ADMINS)
 async def manage_channels(message: types.Message):
