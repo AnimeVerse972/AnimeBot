@@ -14,6 +14,7 @@ async def init_db():
     db_pool = await asyncpg.create_pool(os.getenv("DATABASE_URL"))
 
     async with db_pool.acquire() as conn:
+        # Jadvallar
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY
@@ -31,11 +32,6 @@ async def init_db():
             );
             CREATE TABLE IF NOT EXISTS admins (
                 user_id BIGINT PRIMARY KEY
-            );
-            CREATE TABLE IF NOT EXISTS channels (
-                id BIGINT PRIMARY KEY,
-                title TEXT,
-                username TEXT
             );
         """)
 
@@ -102,7 +98,7 @@ async def delete_kino_code(code):
             DELETE FROM kino_codes WHERE code = $1;
             COMMIT;
         """, code)
-        return "DELETE" in result
+        return "DELETE" in result  # natija qaytadi
 
 # === Statistika yangilash ===
 async def increment_stat(code, field):
@@ -156,26 +152,3 @@ async def remove_admin(user_id: int):
     ADMINS_CACHE.discard(user_id)
     async with db_pool.acquire() as conn:
         await conn.execute("DELETE FROM admins WHERE user_id = $1", user_id)
-
-# =========================
-# 📢 Kanallar jadvali uchun funksiyalar
-# =========================
-
-async def add_channel_to_db(channel_id: int, title: str, username: str):
-    async with db_pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO channels (id, title, username)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                username = EXCLUDED.username
-        """, channel_id, title, username)
-
-async def remove_channel_from_db(channel_id: int):
-    async with db_pool.acquire() as conn:
-        await conn.execute("DELETE FROM channels WHERE id = $1", channel_id)
-
-async def get_all_channels():
-    async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT id, title, username FROM channels")
-        return [{"id": r["id"], "title": r["title"], "username": r["username"]} for r in rows]
