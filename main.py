@@ -110,11 +110,6 @@ async def make_full_subscribe_markup(code):
     markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return markup
 
-from aiogram import types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-# konkurs.py dan:
-# from konkurs import load_participants, save_participants, ensure_dirs
-
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
@@ -206,6 +201,7 @@ async def check_subscription_callback(call: CallbackQuery):
         await send_reklama_post(call.from_user.id, code)
         await increment_stat(code, "searched")
         
+# === 🎞 Barcha animelar tugmasi ===
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
     kodlar = await get_all_codes()
@@ -218,7 +214,12 @@ async def show_all_animes(message: types.Message):
     for row in kodlar:
         text += f"`{row['code']}` – *{row['title']}*\n"
 
-    await message.answer(text, parse_mode="Markdown")
+    # Matnni 3000 belgidan oshmaydigan qismlarga ajratish
+    async def send_chunks(text, chunk_size=3000):
+        for i in range(0, len(text), chunk_size):
+            await message.answer(text[i:i+chunk_size], parse_mode="Markdown")
+
+    await send_chunks(text
 
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
 async def contact_admin(message: types.Message):
