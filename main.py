@@ -219,7 +219,7 @@ async def show_all_animes(message: types.Message):
         for i in range(0, len(text), chunk_size):
             await message.answer(text[i:i+chunk_size], parse_mode="Markdown")
 
-    await send_chunks(text
+    await send_chunks(text)
 
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
 async def contact_admin(message: types.Message):
