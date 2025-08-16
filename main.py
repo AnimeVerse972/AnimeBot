@@ -201,7 +201,7 @@ async def check_subscription_callback(call: CallbackQuery):
         await send_reklama_post(call.from_user.id, code)
         await increment_stat(code, "searched")
         
-# === 🎞 Barcha animelar tugmasi ===
+# === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
 async def show_all_animes(message: types.Message):
     kodlar = await get_all_codes()
@@ -209,17 +209,19 @@ async def show_all_animes(message: types.Message):
         await message.answer("⛔️ Hozircha animelar yoʻq.")
         return
 
-    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))  # raqam bo‘yicha tartib
-    text = "📄 *Barcha animelar:*\n\n"
-    for row in kodlar:
-        text += f"`{row['code']}` – *{row['title']}*\n"
+    # Kodlarni raqam bo‘yicha tartiblash
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
 
-    # Matnni 3000 belgidan oshmaydigan qismlarga ajratish
-    async def send_chunks(text, chunk_size=3000):
-        for i in range(0, len(text), chunk_size):
-            await message.answer(text[i:i+chunk_size], parse_mode="Markdown")
+    # Har 100 tadan bo‘lib yuborish
+    chunk_size = 100
+    for i in range(0, len(kodlar), chunk_size):
+        chunk = kodlar[i:i + chunk_size]
+        text = "📄 *Barcha animelar:*\n\n"
+        for row in chunk:
+            text += f"`{row['code']}` – *{row['title']}*\n"
 
-    await send_chunks(text)
+        await message.answer(text, parse_mode="Markdown")
+
 
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
 async def contact_admin(message: types.Message):
