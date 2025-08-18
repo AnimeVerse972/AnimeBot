@@ -122,7 +122,14 @@ async def start_handler(message: types.Message):
     except Exception as e:
         # ro‘yxatga qo‘shish muvaffiyatsiz bo‘lsa ham flow to‘xtamasin
         print(f"[add_user] {user_id} -> {e}")
-
+    if unsubscribed:
+        # args ni markup ga uzatyapmiz — obuna bo‘lgandan keyin qaytishda deeplink saqlansin
+        markup = await make_full_subscribe_markup(args)
+        await message.answer(
+            "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
+            reply_markup=markup
+        )
+        return
     # 1) Majburiy obuna tekshiruvi (deeplink parametrini saqlagan holda)
     try:
         unsubscribed = await get_unsubscribed_channels(user_id)
