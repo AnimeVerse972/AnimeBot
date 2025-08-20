@@ -113,32 +113,23 @@ async def make_full_subscribe_markup(code):
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
-    # get_args() aiogram 2.25 da bor; None bo‘lsa bo‘sh qatorga tushirsin
     args = (message.get_args() or "").strip()
 
-    # 0) Userni ro‘yxatga olish (sening funksiyang)
     try:
         await add_user(user_id)
     except Exception as e:
-        # ro‘yxatga qo‘shish muvaffiyatsiz bo‘lsa ham flow to‘xtamasin
         print(f"[add_user] {user_id} -> {e}")
 
-    # 1) Majburiy obuna tekshiruvi (deeplink parametrini saqlagan holda)
-    try:
-        unsubscribed = await get_unsubscribed_channels(user_id)
-    except Exception as e:
-        print(f"[subs_check] {user_id} -> {e}")
-        unsubscribed = []
+    # ❗ faqat obuna bo‘lmagan kanallarni qaytaradi
+    unsubscribed = await get_unsubscribed_channels(user_id, bot)
 
     if unsubscribed:
-        # args ni markup ga uzatyapmiz — obuna bo‘lgandan keyin qaytishda deeplink saqlansin
         markup = await make_full_subscribe_markup(args)
         await message.answer(
             "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
             reply_markup=markup
         )
         return
-
     # 2) Raqamli deeplink: /start 12345 -> kodni yuborish
     if args and args.isdigit():
         code = args
