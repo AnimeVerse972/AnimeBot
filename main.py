@@ -14,6 +14,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils import executor
 from aiogram.utils.exceptions import RetryAfter, BotBlocked, ChatNotFound
+from aiogram.utils.markdown import escape_md
 
 # === 📂 Loyihaga tegishli modullar ===
 from konkurs import register_konkurs_handlers
@@ -113,23 +114,32 @@ async def make_full_subscribe_markup(code):
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
+    # get_args() aiogram 2.25 da bor; None bo‘lsa bo‘sh qatorga tushirsin
     args = (message.get_args() or "").strip()
 
+    # 0) Userni ro‘yxatga olish (sening funksiyang)
     try:
         await add_user(user_id)
     except Exception as e:
+        # ro‘yxatga qo‘shish muvaffiyatsiz bo‘lsa ham flow to‘xtamasin
         print(f"[add_user] {user_id} -> {e}")
 
-    # ❗ faqat obuna bo‘lmagan kanallarni qaytaradi
-    unsubscribed = await get_unsubscribed_channels(user_id, bot)
+    # 1) Majburiy obuna tekshiruvi (deeplink parametrini saqlagan holda)
+    try:
+        unsubscribed = await get_unsubscribed_channels(user_id)
+    except Exception as e:
+        print(f"[subs_check] {user_id} -> {e}")
+        unsubscribed = []
 
     if unsubscribed:
+        # args ni markup ga uzatyapmiz — obuna bo‘lgandan keyin qaytishda deeplink saqlansin
         markup = await make_full_subscribe_markup(args)
         await message.answer(
             "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
             reply_markup=markup
         )
         return
+
     # 2) Raqamli deeplink: /start 12345 -> kodni yuborish
     if args and args.isdigit():
         code = args
@@ -720,29 +730,35 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     await state.finish()
     
 # === Kodlar ro‘yxat
-@dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
-async def kodlar(message: types.Message):
-    kodlar = await get_all_codes()
-    if not kodlar:
-        await message.answer("⛔️ Hech qanday kod topilmadi.")
+@dp.message_handler(lambda message: message.text == "📋 Kodlar ro‘yxati")
+async def list_codes(message: types.Message):
+    kino_codes = await get_all_kino_codes()
+    if not kino_codes:
+        await message.answer("Kodlar bazada mavjud emas.")
         return
 
-    # Kodlarni raqam bo‘yicha saralash
-    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
+    MAX_LEN = 4000
+    text = "📋 Kodlar ro‘yxati:\n\n"
 
-    # Matnni bo‘lish uchun vaqtinchalik buffer
-    text = "📄 *Kodlar ro‘yxati:*\n\n"
-    MAX_LEN = 4000  # Markdown uchun xavfsiz limit
+    for code, channel_id, reklama_id, post_count, title in kino_codes:
+        line = (
+            f"🔑 Kod: `{escape_md(code)}`\n"
+            f"📺 Anime: {escape_md(title)}\n"
+            f"📡 Kanal ID: `{channel_id}`\n"
+            f"📨 Reklama ID: `{reklama_id}`\n"
+            f"📊 Postlar soni: {post_count}\n\n"
+        )
 
-    for row in kodlar:
-        code = escape_md(str(row["code"]))
-        title = escape_md(str(row["title"]))
-        line = f"`{code}` - *{title}*\n"
-
-        # Agar qo‘shilsa limitdan oshsa, avvalgi qismini yuboramiz
+        # Agar qo‘shilsa limitdan oshsa -> hozirgini yuborib, yangisini boshlaymiz
         if len(text) + len(line) > MAX_LEN:
             await message.answer(text, parse_mode="MarkdownV2")
-            text = ""  # Yangi bo
+            text = "📋 Kodlar ro‘yxati (davomi):\n\n"
+
+        text += line
+
+    # Oxirgi bo‘lakni ham yuborish shart
+    if text.strip():
+        await message.answer(text, parse_mode="MarkdownV2")
         
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
