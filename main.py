@@ -26,7 +26,7 @@ load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CHANNELS = os.getenv("CHANNEL_USERNAMES").split(",")
+CHANNELS = ["@AniVerseClip", "@AniVerseUzDub"]
 MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
