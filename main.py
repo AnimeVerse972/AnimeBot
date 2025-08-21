@@ -609,39 +609,6 @@ async def send_forward_only(message: types.Message, state: FSMContext):
 
     await message.answer(f"✅ Yuborildi: {success} ta\n❌ Xatolik: {fail} ta")
 
-# === Obuna tekshirish callback
-@dp.callback_query_handler(lambda c: c.data.startswith("check_sub:"))
-async def check_sub_callback(callback_query: types.CallbackQuery):
-    code = callback_query.data.split(":")[1]
-    user_id = callback_query.from_user.id
-
-    not_subscribed = []
-    buttons = []
-
-    for channel in CHANNELS:
-        try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            if member.status in ['left', 'kicked']:
-                not_subscribed.append(channel)
-                invite_link = await bot.create_chat_invite_link(channel)
-                buttons.append([
-                    InlineKeyboardButton("🔔 Obuna bo‘lish", url=invite_link.invite_link)
-                ])
-        except Exception as e:
-            print(f"❌ Obuna tekshiruv xatosi: {channel} -> {e}")
-            continue
-
-    if not_subscribed:
-        buttons.append([InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        await callback_query.message.edit_text(
-            "❗ Hali ham barcha kanallarga obuna bo‘lmagansiz. Iltimos, barchasiga obuna bo‘ling:",
-            reply_markup=keyboard
-        )
-    else:
-        await callback_query.message.edit_text("✅ Obuna muvaffaqiyatli tekshirildi!")
-        await send_reklama_post(user_id, code)
-
 # === Reklama postni yuborish
 async def send_reklama_post(user_id, code):
     data = await get_kino_by_code(code)
