@@ -34,17 +34,6 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-async def make_subscribe_markup(code):
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for channel in CHANNELS:
-        try:
-            invite_link = await bot.create_chat_invite_link(channel.strip())
-            keyboard.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=invite_link.invite_link))
-        except Exception as e:
-            print(f"❌ Link yaratishda xatolik: {channel} -> {e}")
-    keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
-    return keyboard
-
 ADMINS = {6486825926}
 
 class AdminStates(StatesGroup):
@@ -74,6 +63,18 @@ class PostStates(StatesGroup):
     waiting_for_title = State()
     waiting_for_link = State()
 
+async def make_subscribe_markup(code):
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    for channel in CHANNELS:
+        try:
+            invite_link = await bot.create_chat_invite_link(channel.strip())
+            keyboard.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=invite_link.invite_link))
+        except Exception as e:
+            print(f"❌ Link yaratishda xatolik: {channel} -> {e}")
+    keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
+    return keyboard
+
+
 async def get_unsubscribed_channels(user_id):
     unsubscribed = []
     for channel in CHANNELS:
@@ -97,34 +98,31 @@ async def is_user_subscribed(user_id):
             return False
     return True
     
-async def make_full_subscribe_markup(code):
+async def make_unsubscribed_markup(user_id: int, code: str):
     markup = InlineKeyboardMarkup(row_width=1)
-    for ch in CHANNELS:
-        ch = ch.strip()
+    unsubscribed = await get_unsubscribed_channels(user_id)
+
+    for ch in unsubscribed:
         try:
-            chat = await bot.get_chat(ch)
+            chat = await bot.get_chat(ch.strip())
             invite_link = chat.invite_link or await bot.export_chat_invite_link(chat.id)
             title = chat.title or ch
             markup.add(InlineKeyboardButton(f"➕ {title}", url=invite_link))
         except Exception as e:
             print(f"❗ Kanal linkini olishda xatolik: {ch} -> {e}")
-    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
+
+    markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
     return markup
 
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
-    # get_args() aiogram 2.25 da bor; None bo‘lsa bo‘sh qatorga tushirsin
     args = (message.get_args() or "").strip()
 
-    # 0) Userni ro‘yxatga olish (sening funksiyang)
     try:
         await add_user(user_id)
     except Exception as e:
-        # ro‘yxatga qo‘shish muvaffiyatsiz bo‘lsa ham flow to‘xtamasin
         print(f"[add_user] {user_id} -> {e}")
-
-    # 1) Majburiy obuna tekshiruvi (deeplink parametrini saqlagan holda)
     try:
         unsubscribed = await get_unsubscribed_channels(user_id)
     except Exception as e:
@@ -132,15 +130,14 @@ async def start_handler(message: types.Message):
         unsubscribed = []
 
     if unsubscribed:
-        # args ni markup ga uzatyapmiz — obuna bo‘lgandan keyin qaytishda deeplink saqlansin
-        markup = await make_full_subscribe_markup(args)
+    # faqat obuna bo‘lmaganlarni chiqaramiz
+        markup = await make_unsubscribed_markup(user_id, args)
         await message.answer(
             "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
             reply_markup=markup
         )
         return
-
-    # 2) Raqamli deeplink: /start 12345 -> kodni yuborish
+        
     if args and args.isdigit():
         code = args
         try:
@@ -153,8 +150,7 @@ async def start_handler(message: types.Message):
             print(f"[send_reklama_post] {user_id}, code={code} -> {e}")
             await message.answer("⚠️ Postni yuborishda muammo bo‘ldi. Keyinroq urinib ko‘ring.")
         return
-
-    # 3) Oddiy /start: xush kelibsiz + foydalanuvchi ID
+        
     try:
         if user_id in ADMINS:
             kb = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -697,35 +693,25 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     await state.finish()
     
 # === Kodlar ro‘yxat
-@dp.message_handler(lambda message: message.text == "📋 Kodlar ro‘yxati")
-async def list_codes(message: types.Message):
-    kino_codes = await get_all_kino_codes()
-    if not kino_codes:
-        await message.answer("Kodlar bazada mavjud emas.")
+@dp.message_handler(lambda m: m.text == "📄 Kodlar ro‘yxati")
+async def show_all_animes(message: types.Message):
+    kodlar = await get_all_codes()
+    if not kodlar:
+        await message.answer("Ba'zada hech qanday kodlar yo'q!")
         return
 
-    MAX_LEN = 4000
-    text = "📋 Kodlar ro‘yxati:\n\n"
+    # Kodlarni raqam bo‘yicha tartiblash
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
 
-    for code, channel_id, reklama_id, post_count, title in kino_codes:
-        line = (
-            f"🔑 Kod: `{escape_md(code)}`\n"
-            f"📺 Anime: {escape_md(title)}\n"
-            f"📡 Kanal ID: `{channel_id}`\n"
-            f"📨 Reklama ID: `{reklama_id}`\n"
-            f"📊 Postlar soni: {post_count}\n\n"
-        )
+    # Har 100 tadan bo‘lib yuborish
+    chunk_size = 100
+    for i in range(0, len(kodlar), chunk_size):
+        chunk = kodlar[i:i + chunk_size]
+        text = "📄 *Barcha animelar:*\n\n"
+        for row in chunk:
+            text += f"`{row['code']}` – *{row['title']}*\n"
 
-        # Agar qo‘shilsa limitdan oshsa -> hozirgini yuborib, yangisini boshlaymiz
-        if len(text) + len(line) > MAX_LEN:
-            await message.answer(text, parse_mode="MarkdownV2")
-            text = "📋 Kodlar ro‘yxati (davomi):\n\n"
-
-        text += line
-
-    # Oxirgi bo‘lakni ham yuborish shart
-    if text.strip():
-        await message.answer(text, parse_mode="MarkdownV2")
+        await message.answer(text, parse_mode="Markdown")
         
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
