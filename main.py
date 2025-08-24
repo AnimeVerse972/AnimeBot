@@ -66,6 +66,9 @@ class PostStates(StatesGroup):
 class KanalStates(StatesGroup):
     waiting_for_channel = State()
 
+class SearchAnime(StatesGroup):
+    waiting_for_query = State()
+
 async def make_subscribe_markup(code):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for channel in CHANNELS:
@@ -167,6 +170,7 @@ async def start_handler(message: types.Message):
             await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{user_id}</code>", reply_markup=kb, parse_mode="HTML")
         else:
             kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            kb.add("🔎 Anime qidirish")
             kb.add(
                 KeyboardButton("🎞 Barcha animelar"),
                 KeyboardButton("✉️ Admin bilan bog‘lanish")
@@ -274,6 +278,41 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
+
+# 🔎 Anime qidirish tugmasi
+@dp.message_handler(text="🔎 Anime qidirish")
+async def start_search(message: types.Message):
+    await message.answer("Qidirayotgan anime nomini kiriting:")
+    await SearchAnime.waiting_for_query.set()
+
+# Qidiruv
+@dp.message_handler(state=SearchAnime.waiting_for_query)
+async def process_search(message: types.Message, state: FSMContext):
+    query = message.text.strip().lower()
+    all_codes = await db.get_all_codes()
+
+    # Filtrlash
+    results = [c for c in all_codes if query in (c["title"] or "").lower()]
+
+    if not results:
+        await message.answer("❌ Hech narsa topilmadi.")
+        await state.finish()
+        return
+
+    bot_username = (await bot.get_me()).username
+
+    # Inline tugmalar yasash
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    for r in results:
+        keyboard.add(
+            InlineKeyboardButton(
+                text=r["title"],
+                url=f"https://t.me/{bot_username}?start={r['code']}"
+            )
+        )
+
+    await message.answer("🔎 Qidiruv natijalari:", reply_markup=keyboard)
+    await state.finish()
 
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
