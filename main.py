@@ -659,7 +659,7 @@ async def send_admin_panel(message: types.Message):
     kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
     kb.add("📦 Bazani olish")
 
-    await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{message.from_user.id}</code>", 
+    await message.answer(f"❌Amal bekor qilindi‼️", 
                          reply_markup=kb, parse_mode="HTML")
 
         
