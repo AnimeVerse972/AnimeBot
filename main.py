@@ -67,7 +67,7 @@ class KanalStates(StatesGroup):
     waiting_for_channel = State()
 
 class SearchAnime(StatesGroup):
-    WAITING_FOR_QUERY = State()
+    waiting_for_query = State()
     
 async def make_subscribe_markup(code):
     keyboard = InlineKeyboardMarkup(row_width=1)
@@ -290,29 +290,16 @@ class SearchAnime(StatesGroup):
 # 🔎 Anime qidirish tugmasi
 @dp.message_handler(text="🔎 Anime qidirish")
 async def start_search(message: types.Message):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(KeyboardButton("❌ Bekor qilish"))
-    await message.answer("Qidirayotgan anime nomini kiriting yoki ❌ Bekor qilish tugmasini bosing:", reply_markup=kb)
-    await SearchAnime.WAITING_FOR_QUERY.set()
+    await message.answer("Qidirayotgan anime nomini kiriting:")
+    await SearchAnime.waiting_for_query.set()
 
-
-# ❌ Bekor qilish tugmasi
-@dp.message_handler(text="❌ Bekor qilish", state="*")
-async def cancel_search(message: types.Message, state: FSMContext):
-    await state.finish()
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    kb.add("🔎 Anime qidirish")
-    kb.add("🎞 Barcha animelar", "✉️ Admin bilan bog‘lanish")
-    await message.answer("❌ Qidiruv bekor qilindi.", reply_markup=kb)
-
-
-# Qidiruv
-@dp.message_handler(state=SearchAnime.WAITING_FOR_QUERY)
+@dp.message_handler(state=SearchAnime.waiting_for_query)
 async def process_search(message: types.Message, state: FSMContext):
     query = message.text.strip().lower()
     all_codes = await db.get_all_codes()
 
-    results = [c for c in all_codes if query in (c["title"] or "").lower()]
+    # Filtrlash
+    results = [c for c in all_codes if query in c["title"].lower()]
 
     if not results:
         await message.answer("❌ Hech narsa topilmadi.")
@@ -321,6 +308,7 @@ async def process_search(message: types.Message, state: FSMContext):
 
     bot_username = (await bot.get_me()).username
 
+    # Inline tugmalar yasash
     keyboard = InlineKeyboardMarkup(row_width=1)
     for r in results:
         keyboard.add(
