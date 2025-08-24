@@ -34,7 +34,7 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-ADMINS = {6486825926}
+ADMINS = {6486825926, 7575041003}
 
 class AdminStates(StatesGroup):
     waiting_for_kino_data = State()
@@ -66,9 +66,6 @@ class PostStates(StatesGroup):
 class KanalStates(StatesGroup):
     waiting_for_channel = State()
 
-class SearchAnime(StatesGroup):
-    WAITING_FOR_QUERY = State()
-    
 async def make_subscribe_markup(code):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for channel in CHANNELS:
@@ -160,7 +157,6 @@ async def start_handler(message: types.Message):
     try:
         if user_id in ADMINS:
             kb = ReplyKeyboardMarkup(resize_keyboard=True)
-            kb.add("🔎 Anime qidirish")
             kb.add("➕ Anime qo‘shish")
             kb.add("📊 Statistika", "📦 Bazani olish")
             kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
@@ -278,43 +274,6 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
-
-# 🔎 Anime qidirish tugmasi
-@dp.message_handler(text="🔎 Anime qidirish")
-async def start_search(message: types.Message):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(KeyboardButton("⬅️ Orqaga"))
-    await message.answer("Qidirayotgan anime nomini kiriting yoki ❌ Bekor qilish tugmasini bosing:", reply_markup=kb)
-    await SearchAnime.WAITING_FOR_QUERY.set()
-
-# Qidiruv
-@dp.message_handler(state=SearchAnime.WAITING_FOR_QUERY)
-async def process_search(message: types.Message, state: FSMContext):
-    query = message.text.strip().lower()
-    all_codes = await db.get_all_codes()
-
-    results = [c for c in all_codes if query in (c["title"] or "").lower()]
-
-    if not results:
-        await message.answer("❌ Hech narsa topilmadi.")
-        await state.finish()
-        return
-
-    bot_username = (await bot.get_me()).username
-
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for r in results:
-        keyboard.add(
-            InlineKeyboardButton(
-                text=r["title"],
-                url=f"https://t.me/{bot_username}?start={r['code']}"
-            )
-        )
-
-    await message.answer("🔎 Qidiruv natijalari:", reply_markup=keyboard)
-    await message.answer("⬅️ Menyuga qaytdingiz", reply_markup=kb)
-    await state.finish()
-
 
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
