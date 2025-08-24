@@ -276,6 +276,7 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
+# 🔎 Anime qidirish tugmasi
 @dp.message_handler(text="🔎 Anime qidirish")
 async def start_search(message: types.Message):
     kb = InlineKeyboardMarkup(row_width=2)
@@ -286,36 +287,37 @@ async def start_search(message: types.Message):
     await message.answer("Qidiruv turini tanlang:", reply_markup=kb)
 
 
-# Callback handler
-@dp.callback_query_handler(lambda c: c.data.startswith("search_by:"))
-async def choose_search_type(call: types.CallbackQuery, state: FSMContext):
+# --- callback faqat kod uchun ---
+@dp.callback_query_handler(lambda c: c.data == "search_by:code")
+async def search_by_code(call: types.CallbackQuery, state: FSMContext):
+    await call.message.answer("🔢 Anime kodini yuboring:")
+    await SearchStates.waiting_for_anime_code.set()
     await call.answer()
-    _, mode = call.data.split(":", 1)
 
-    if mode == "code":
-        kb_cancel = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_search")
+
+# --- kodni qabul qilish ---
+@dp.message_handler(state=SearchStates.waiting_for_anime_code, content_types=types.ContentTypes.TEXT)
+async def process_code(message: types.Message, state: FSMContext):
+    code = message.text.strip()
+
+    # DB dan kod bo‘yicha qidirish
+    anime = await db.get_anime_by_code(code)
+
+    if anime:
+        title, link, img = anime
+        kb = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("📥 Yuklab olish", url=link)
         )
-          await call.message.answer("🔢 Anime kodini yuboring:")
-          await SearchStates.waiting_for_anime_code.set()
-          await call.answer()
-
-
-    elif mode == "name":
-        kb_site = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("🌐 Nom orqali qidirish", url=SEARCH_URL)
+        await message.answer_photo(
+            photo=img,
+            caption=f"🎬 <b>{title}</b>\n🔢 Kod: <code>{code}</code>",
+            reply_markup=kb,
+            parse_mode="HTML"
         )
-        await call.message.answer("Nom orqali qidirish uchun saytga o‘ting 👇", reply_markup=kb_site)
-        await state.finish()
+    else:
+        await message.answer("❌ Bunday kod topilmadi.")
 
-# ❌ Bekor qilish
-@dp.callback_query_handler(lambda c: c.data == "cancel_search", state="*")
-async def cancel_search(call: types.CallbackQuery, state: FSMContext):
-    await state.finish()
-    await call.answer("Bekor qilindi", show_alert=False)
-    await call.message.edit_reply_markup()
-    await call.message.answer("❌ Qidiruv bekor qilindi.")
-
+    # ❗ faqat bitta javob va qidiruv tugaydi
     await state.finish()
 
 # === 🎞 Barcha animelar tugmasi
