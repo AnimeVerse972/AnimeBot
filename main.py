@@ -581,33 +581,57 @@ async def show_code_stat(message: types.Message, state: FSMContext):
         parse_mode="HTML"
     )
 
+# --- Kodni tahrirlash boshlash ---
 @dp.message_handler(lambda message: message.text == "✏️ Kodni tahrirlash", user_id=ADMINS)
 async def edit_code_start(message: types.Message):
-    await message.answer("Qaysi kodni tahrirlashni xohlaysiz? (eski kodni yuboring)")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("❌ Bekor qilish")
+    await message.answer("Qaysi kodni tahrirlashni xohlaysiz? (eski kodni yuboring)", reply_markup=kb)
     await EditCode.WaitingForOldCode.set()
 
 # --- Eski kodni qabul qilish ---
 @dp.message_handler(state=EditCode.WaitingForOldCode, user_id=ADMINS)
 async def get_old_code(message: types.Message, state: FSMContext):
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await send_admin_panel(message)  # qayta admin panelni chiqarish
+        return
+
     code = message.text.strip()
     post = await get_kino_by_code(code)
     if not post:
         await message.answer("❌ Bunday kod topilmadi. Qaytadan urinib ko‘ring.")
         return
     await state.update_data(old_code=code)
-    await message.answer(f"🔎 Kod: {code}\n📌 Nomi: {post['title']}\n\nYangi kodni yuboring:")
+
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("❌ Bekor qilish")
+    await message.answer(f"🔎 Kod: {code}\n📌 Nomi: {post['title']}\n\nYangi kodni yuboring:", reply_markup=kb)
     await EditCode.WaitingForNewCode.set()
 
 # --- Yangi kodni olish ---
 @dp.message_handler(state=EditCode.WaitingForNewCode, user_id=ADMINS)
 async def get_new_code(message: types.Message, state: FSMContext):
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await send_admin_panel(message)
+        return
+
     await state.update_data(new_code=message.text.strip())
-    await message.answer("Yangi nomini yuboring:")
+
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("❌ Bekor qilish")
+    await message.answer("Yangi nomini yuboring:", reply_markup=kb)
     await EditCode.WaitingForNewTitle.set()
 
 # --- Yangi nomni olish va yangilash ---
 @dp.message_handler(state=EditCode.WaitingForNewTitle, user_id=ADMINS)
 async def get_new_title(message: types.Message, state: FSMContext):
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await send_admin_panel(message)
+        return
+
     data = await state.get_data()
     try:
         await update_anime_code(
@@ -620,6 +644,24 @@ async def get_new_title(message: types.Message, state: FSMContext):
         await message.answer(f"❌ Xatolik yuz berdi:\n{e}")
     finally:
         await state.finish()
+        await send_admin_panel(message)
+
+
+# --- Admin panelga qaytaruvchi funksiya ---
+async def send_admin_panel(message: types.Message):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("➕ Anime qo‘shish")
+    kb.add("📊 Statistika", "📈 Kod statistikasi")
+    kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
+    kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
+    kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
+    kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
+    kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
+    kb.add("📦 Bazani olish")
+
+    await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{message.from_user.id}</code>", 
+                         reply_markup=kb, parse_mode="HTML")
+
         
 # === Oddiy raqam yuborilganda
 @dp.message_handler(lambda message: message.text.isdigit())
