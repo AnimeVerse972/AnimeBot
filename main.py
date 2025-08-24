@@ -160,6 +160,7 @@ async def start_handler(message: types.Message):
     try:
         if user_id in ADMINS:
             kb = ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("🔎 Anime qidirish")
             kb.add("➕ Anime qo‘shish")
             kb.add("📊 Statistika", "📦 Bazani olish")
             kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
@@ -170,7 +171,6 @@ async def start_handler(message: types.Message):
             await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{user_id}</code>", reply_markup=kb, parse_mode="HTML")
         else:
             kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            kb.add("🔎 Anime qidirish")
             kb.add(
                 KeyboardButton("🎞 Barcha animelar"),
                 KeyboardButton("✉️ Admin bilan bog‘lanish")
