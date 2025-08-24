@@ -67,8 +67,8 @@ class KanalStates(StatesGroup):
     waiting_for_channel = State()
 
 class SearchAnime(StatesGroup):
-    waiting_for_query = State()
-
+    WAITING_FOR_QUERY = State()
+    
 async def make_subscribe_markup(code):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for channel in CHANNELS:
@@ -279,19 +279,39 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.dispatcher import FSMContext
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+
+class SearchAnime(StatesGroup):
+    WAITING_FOR_QUERY = State()
+
+
 # 🔎 Anime qidirish tugmasi
 @dp.message_handler(text="🔎 Anime qidirish")
 async def start_search(message: types.Message):
-    await message.answer("Qidirayotgan anime nomini kiriting:")
-    await SearchAnime.waiting_for_query.set()
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(KeyboardButton("❌ Bekor qilish"))
+    await message.answer("Qidirayotgan anime nomini kiriting yoki ❌ Bekor qilish tugmasini bosing:", reply_markup=kb)
+    await SearchAnime.WAITING_FOR_QUERY.set()
+
+
+# ❌ Bekor qilish tugmasi
+@dp.message_handler(text="❌ Bekor qilish", state="*")
+async def cancel_search(message: types.Message, state: FSMContext):
+    await state.finish()
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb.add("🔎 Anime qidirish")
+    kb.add("🎞 Barcha animelar", "✉️ Admin bilan bog‘lanish")
+    await message.answer("❌ Qidiruv bekor qilindi.", reply_markup=kb)
+
 
 # Qidiruv
-@dp.message_handler(state=SearchAnime.waiting_for_query)
+@dp.message_handler(state=SearchAnime.WAITING_FOR_QUERY)
 async def process_search(message: types.Message, state: FSMContext):
     query = message.text.strip().lower()
     all_codes = await db.get_all_codes()
 
-    # Filtrlash
     results = [c for c in all_codes if query in (c["title"] or "").lower()]
 
     if not results:
@@ -301,7 +321,6 @@ async def process_search(message: types.Message, state: FSMContext):
 
     bot_username = (await bot.get_me()).username
 
-    # Inline tugmalar yasash
     keyboard = InlineKeyboardMarkup(row_width=1)
     for r in results:
         keyboard.add(
