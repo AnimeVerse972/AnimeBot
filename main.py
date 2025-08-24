@@ -279,40 +279,13 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.dispatcher import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-
-class SearchAnime(StatesGroup):
-    WAITING_FOR_QUERY = State()
-
-
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.dispatcher import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-
-class SearchAnime(StatesGroup):
-    WAITING_FOR_QUERY = State()
-
-
 # 🔎 Anime qidirish tugmasi
 @dp.message_handler(text="🔎 Anime qidirish")
 async def start_search(message: types.Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(KeyboardButton("❌ Bekor qilish"))
+    kb.add(KeyboardButton("⬅️ Orqaga"))
     await message.answer("Qidirayotgan anime nomini kiriting yoki ❌ Bekor qilish tugmasini bosing:", reply_markup=kb)
     await SearchAnime.WAITING_FOR_QUERY.set()
-
-
-# ❌ Bekor qilish tugmasi
-@dp.message_handler(text="❌ Bekor qilish", state="*")
-async def cancel_search(message: types.Message, state: FSMContext):
-    await state.finish()
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    kb.add("🔎 Anime qidirish")
-    kb.add("🎞 Barcha animelar", "✉️ Admin bilan bog‘lanish")
-    await message.answer("❌ Qidiruv bekor qilindi.", reply_markup=kb)
-
 
 # Qidiruv
 @dp.message_handler(state=SearchAnime.WAITING_FOR_QUERY)
@@ -337,11 +310,6 @@ async def process_search(message: types.Message, state: FSMContext):
                 url=f"https://t.me/{bot_username}?start={r['code']}"
             )
         )
-
-    # Natijalarni chiqaramiz va menuga qaytamiz
-    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    kb.add("🔎 Anime qidirish")
-    kb.add("🎞 Barcha animelar", "✉️ Admin bilan bog‘lanish")
 
     await message.answer("🔎 Qidiruv natijalari:", reply_markup=keyboard)
     await message.answer("⬅️ Menyuga qaytdingiz", reply_markup=kb)
