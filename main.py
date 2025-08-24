@@ -29,6 +29,7 @@ API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = ["@AniVerseClip", "@AniVerseUzDub"]
 MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
+SEARCH_URL = "https://t.me/AniVerseClipBot/AniverseXStudioNova"
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
@@ -265,7 +266,7 @@ async def delete_channel_confirm(callback: types.CallbackQuery):
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga", user_id=ADMINS)
 async def back_to_admin_menu(message: types.Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("➕ Anime qo‘shish")
+    kb.add("➕ Anime qo‘shish", "🔎 Anime qidirish")
     kb.add("📊 Statistika", "📈 Kod statistikasi")
     kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
     kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
@@ -274,6 +275,48 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
+
+@dp.message_handler(text="🔎 Anime qidirish")
+async def start_search(message: types.Message):
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("🧩 Kod orqali", callback_data="search_by:code"),
+        InlineKeyboardButton("🔤 Nom orqali", url="https://t.me/AniVerseClipBot/AniverseXStudioNova"),
+    )
+    await message.answer("Qidiruv turini tanlang:", reply_markup=kb)
+
+
+# Callback handler
+@dp.callback_query_handler(lambda c: c.data.startswith("search_by:"))
+async def choose_search_type(call: types.CallbackQuery, state: FSMContext):
+    await call.answer()
+    _, mode = call.data.split(":", 1)
+
+    if mode == "code":
+        kb_cancel = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_search")
+        )
+          await call.message.answer("🔢 Anime kodini yuboring:")
+          await SearchStates.waiting_for_anime_code.set()
+          await call.answer()
+
+
+    elif mode == "name":
+        kb_site = InlineKeyboardMarkup().add(
+            InlineKeyboardButton("🌐 Nom orqali qidirish", url=SEARCH_URL)
+        )
+        await call.message.answer("Nom orqali qidirish uchun saytga o‘ting 👇", reply_markup=kb_site)
+        await state.finish()
+
+# ❌ Bekor qilish
+@dp.callback_query_handler(lambda c: c.data == "cancel_search", state="*")
+async def cancel_search(call: types.CallbackQuery, state: FSMContext):
+    await state.finish()
+    await call.answer("Bekor qilindi", show_alert=False)
+    await call.message.edit_reply_markup()
+    await call.message.answer("❌ Qidiruv bekor qilindi.")
+
+    await state.finish()
 
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
