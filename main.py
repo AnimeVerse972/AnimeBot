@@ -262,15 +262,14 @@ async def delete_channel_confirm(callback: types.CallbackQuery):
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga", user_id=ADMINS)
 async def back_to_admin_menu(message: types.Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("➕ Anime qo‘shish", "🔎 Anime qidirish")
-    kb.add("📊 Statistika", "📈 Kod statistikasi")
-    kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
-    kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
-    kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-    kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
-    kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
-    kb.add("📦 Bazani olish")
-    await message.answer("🔙 Admin menyu:", reply_markup=kb)
+    kb.add("➕ Anime qo‘shish")
+    kb.add("📊 Statistika", "📦 Bazani olish")
+    kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
+    kb.add("🏆 Konkurs", "📤 Post qilish")
+    kb.add("📢 Habar yuborish")
+    kb.add("📥 User qo‘shish", "➕ Admin qo‘shish")
+    kb.add("❌ Kodni o‘chirish", "📘 Qo‘llanma", "📡 Kanal boshqaruvi")
+await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
