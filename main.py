@@ -269,7 +269,7 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📢 Habar yuborish")
     kb.add("📥 User qo‘shish", "➕ Admin qo‘shish")
     kb.add("❌ Kodni o‘chirish", "📘 Qo‘llanma", "📡 Kanal boshqaruvi")
-await message.answer("🔙 Admin menyu:", reply_markup=kb)
+    await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
