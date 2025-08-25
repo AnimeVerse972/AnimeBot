@@ -29,7 +29,6 @@ API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = ["@AniVerseClip", "@AniVerseUzDub"]
 MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
-SEARCH_URL = "https://t.me/AniVerseClipBot/AniverseXStudioNova"
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
@@ -55,9 +54,6 @@ class EditCode(StatesGroup):
     
 class UserStates(StatesGroup):
     waiting_for_admin_message = State()
-
-class SearchStates(StatesGroup):
-    waiting_for_anime_name = State()
     
 class PostStates(StatesGroup):
     waiting_for_image = State()
@@ -158,7 +154,7 @@ async def start_handler(message: types.Message):
     try:
         if user_id in ADMINS:
             kb = ReplyKeyboardMarkup(resize_keyboard=True)
-            kb.add("➕ Anime qo‘shish", "🔎 Anime qidirish")
+            kb.add("➕ Anime qo‘shish")
             kb.add("📊 Statistika", "📦 Bazani olish")
             kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
             kb.add("🏆 Konkurs", "📤 Post qilish")
@@ -275,50 +271,6 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
     kb.add("📦 Bazani olish")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
-
-# 🔎 Anime qidirish tugmasi
-@dp.message_handler(text="🔎 Anime qidirish")
-async def start_search(message: types.Message):
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("🧩 Kod orqali", callback_data="search_by:code"),
-        InlineKeyboardButton("🔤 Nom orqali", url="https://t.me/AniVerseClipBot/AniverseXStudioNova"),
-    )
-    await message.answer("Qidiruv turini tanlang:", reply_markup=kb)
-
-
-# --- callback faqat kod uchun ---
-@dp.callback_query_handler(lambda c: c.data == "search_by:code")
-async def search_by_code(call: types.CallbackQuery, state: FSMContext):
-    await call.message.answer("🔢 Anime kodini yuboring:")
-    await SearchStates.waiting_for_anime_code.set()
-    await call.answer()
-
-
-# --- kodni qabul qilish ---
-@dp.message_handler(state=SearchStates.waiting_for_anime_code, content_types=types.ContentTypes.TEXT)
-async def process_code(message: types.Message, state: FSMContext):
-    code = message.text.strip()
-
-    # DB dan kod bo‘yicha qidirish
-    anime = await db.get_anime_by_code(code)
-
-    if anime:
-        title, link, img = anime
-        kb = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("📥 Yuklab olish", url=link)
-        )
-        await message.answer_photo(
-            photo=img,
-            caption=f"🎬 <b>{title}</b>\n🔢 Kod: <code>{code}</code>",
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer("❌ Bunday kod topilmadi.")
-
-    # ❗ faqat bitta javob va qidiruv tugaydi
-    await state.finish()
 
 # === 🎞 Barcha animelar tugmasi
 @dp.message_handler(lambda m: m.text == "🎞 Barcha animelar")
