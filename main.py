@@ -197,32 +197,153 @@ async def check_subscription_callback(call: CallbackQuery):
         await send_reklama_post(call.from_user.id, code)
         await increment_stat(code, "searched")
 
+# === 📡 KANAL BOSHQARUVI ===
 @dp.message_handler(lambda m: m.text == "📡 Kanal boshqaruvi", user_id=ADMINS)
-async def kanal_menu(message: types.Message):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("➕ Kanal qo‘shish", "📋 Kanal ro‘yxati")
-    kb.add("❌ Kanal o‘chirish", "⬅️ Orqaga")
-    await message.answer("📡 Kanal menyusi:", reply_markup=kb)
+async def kanal_boshqaruvi(message: types.Message):
+    kb = InlineKeyboardMarkup()
+    kb.add(
+        InlineKeyboardButton("🔗 Majburiy obuna", callback_data="channel_type:sub"),
+        InlineKeyboardButton("📌 Asosiy kanallar", callback_data="channel_type:main")
+    )
+    await message.answer("📡 Qaysi kanal turini boshqarasiz?", reply_markup=kb)
 
 
-# === ➕ KANAL QO‘SHISH ===
-@dp.message_handler(lambda m: m.text == "➕ Kanal qo‘shish", user_id=ADMINS)
-async def add_channel_start(message: types.Message):
-    await KanalStates.waiting_for_channel.set()
-    await message.answer("📎 Kanal username yuboring (masalan: @mychannel):")
+# === TUR TANLASH ===
+@dp.callback_query_handler(lambda c: c.data.startswith("channel_type:"), user_id=ADMINS)
+async def select_channel_type(callback: types.CallbackQuery, state: FSMContext):
+    ctype = callback.data.split(":")[1]
 
+    # Tanlangan turini saqlaymiz
+    await state.update_data(channel_type=ctype)
+
+    kb = InlineKeyboardMarkup()
+    kb.add(
+        InlineKeyboardButton("➕ Kanal qo‘shish", callback_data="action:add"),
+        InlineKeyboardButton("📋 Kanal ro‘yxati", callback_data="action:list")
+    )
+    kb.add(
+        InlineKeyboardButton("❌ Kanal o‘chirish", callback_data="action:delete"),
+        InlineKeyboardButton("⬅️ Orqaga", callback_data="action:back")
+    )
+
+    if ctype == "sub":
+        await callback.message.edit_text("📡 Majburiy obuna kanallari menyusi:", reply_markup=kb)
+    else:
+        await callback.message.edit_text("📌 Asosiy kanallar menyusi:", reply_markup=kb)
+
+    await callback.answer()
+
+
+# === ACTION TANLASH ===
+@dp.callback_query_handler(lambda c: c.data.startswith("action:"), user_id=ADMINS)
+async def channel_actions(callback: types.CallbackQuery, state: FSMContext):
+    action = callback.data.split(":")[1]
+    data = await state.get_data()
+    ctype = data.get("channel_type")
+
+    if not ctype:
+        await callback.answer("❗ Avval kanal turini tanlang.")
+        return
+
+    if action == "add":
+        await KanalStates.waiting_for_channel.set()
+        await callback.message.answer("📎 Kanal username yuboring (masalan: @mychannel):")
+
+    elif action == "list":
+        if ctype == "sub":
+            if not CHANNELS:
+                await callback.message.answer("📭 Majburiy obuna kanali yo‘q.")
+            else:
+                text = "📋 Majburiy obuna kanallari:\n\n"
+                for i, ch in enumerate(CHANNELS, 1):
+                    text += f"{i}. {ch}\n"
+                await callback.message.answer(text)
+        else:
+            if not MAIN_CHANNELS:
+                await callback.message.answer("📭 Asosiy kanal yo‘q.")
+            else:
+                text = "📌 Asosiy kanallar:\n\n"
+                for i, ch in enumerate(MAIN_CHANNELS, 1):
+                    text += f"{i}. {ch}\n"
+                await callback.message.answer(text)
+
+    elif action == "delete":
+        kb = InlineKeyboardMarkup()
+        if ctype == "sub":
+            if not CHANNELS:
+                await callback.message.answer("📭 Majburiy obuna kanali yo‘q.")
+                return
+            for ch in CHANNELS:
+                kb.add(InlineKeyboardButton(f"O‘chirish: {ch}", callback_data=f"delch:{ch}"))
+        else:
+            if not MAIN_CHANNELS:
+                await callback.message.answer("📭 Asosiy kanal yo‘q.")
+                return
+            for ch in MAIN_CHANNELS:
+                kb.add(InlineKeyboardButton(f"O‘chirish: {ch}", callback_data=f"delmain:{ch}"))
+
+        await callback.message.answer("❌ Qaysi kanalni o‘chirmoqchisiz?", reply_markup=kb)
+
+    elif action == "back":
+        kb = InlineKeyboardMarkup()
+        kb.add(
+            InlineKeyboardButton("🔗 Majburiy obuna", callback_data="channel_type:sub"),
+            InlineKeyboardButton("📌 Asosiy kanallar", callback_data="channel_type:main")
+        )
+        await callback.message.edit_text("📡 Qaysi kanal turini boshqarasiz?", reply_markup=kb)
+
+    await callback.answer()
+
+
+# === ➕ KANAL QO‘SHISH (STATE) ===
 @dp.message_handler(state=KanalStates.waiting_for_channel, user_id=ADMINS)
 async def add_channel_finish(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    ctype = data.get("channel_type")
+
     channel = message.text.strip()
     if not channel.startswith("@"):
         await message.answer("❗ Kanal @ bilan boshlanishi kerak.")
         return
-    if channel in CHANNELS:
-        await message.answer("ℹ️ Bu kanal allaqachon ro‘yxatda bor.")
+
+    if ctype == "sub":
+        if channel in CHANNELS:
+            await message.answer("ℹ️ Bu kanal allaqachon ro‘yxatda bor.")
+        else:
+            CHANNELS.append(channel)
+            await message.answer(f"✅ {channel} qo‘shildi (majburiy obuna).")
     else:
-        CHANNELS.append(channel)
-        await message.answer(f"✅ {channel} kanal qo‘shildi.")
+        if channel in MAIN_CHANNELS:
+            await message.answer("ℹ️ Bu kanal allaqachon ro‘yxatda bor.")
+        else:
+            MAIN_CHANNELS.append(channel)
+            await message.answer(f"✅ {channel} qo‘shildi (asosiy kanal).")
+
     await state.finish()
+
+
+# === ❌ O‘CHIRISH HANDLERLARI ===
+@dp.callback_query_handler(lambda c: c.data.startswith("delch:"), user_id=ADMINS)
+async def delete_channel_confirm_sub(callback: types.CallbackQuery):
+    channel = callback.data.split(":", 1)[1]
+    if channel in CHANNELS:
+        CHANNELS.remove(channel)
+        await callback.message.edit_text(f"✅ {channel} (majburiy obuna) o‘chirildi.")
+    else:
+        await callback.message.edit_text("⚠️ Bu kanal topilmadi.")
+    await callback.answer()
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith("delmain:"), user_id=ADMINS)
+async def delete_channel_confirm_main(callback: types.CallbackQuery):
+    channel = callback.data.split(":", 1)[1]
+    if channel in MAIN_CHANNELS:
+        MAIN_CHANNELS.remove(channel)
+        await callback.message.edit_text(f"✅ {channel} (asosiy kanal) o‘chirildi.")
+    else:
+        await callback.message.edit_text("⚠️ Bu kanal topilmadi.")
+    await callback.answer()
+
 
 
 # === 📋 KANAL RO‘YXATI ===
@@ -257,7 +378,6 @@ async def delete_channel_confirm(callback: types.CallbackQuery):
     else:
         await callback.message.edit_text("⚠️ Bu kanal topilmadi.")
     await callback.answer()
-
 # ⬅️ Orqaga qaytish (Admin panelga)
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga", user_id=ADMINS)
 async def back_to_admin_menu(message: types.Message):
