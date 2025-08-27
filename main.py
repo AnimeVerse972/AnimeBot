@@ -169,7 +169,7 @@ async def start_handler(message: types.Message):
                 KeyboardButton("✉️ Admin bilan bog‘lanish")
             )
             await message.answer(
-                f"🎬 Botga xush kelibsiz!\n🆔 Sizning ID: <code>{user_id}</code>\nKod kiriting:",
+                f"✨",
                 reply_markup=kb,
                 parse_mode="HTML"
             )
@@ -766,13 +766,12 @@ async def get_new_title(message: types.Message, state: FSMContext):
 async def send_admin_panel(message: types.Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("➕ Anime qo‘shish")
-    kb.add("📊 Statistika", "📈 Kod statistikasi")
-    kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
-    kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
-    kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-    kb.add("➕ Admin qo‘shish", "🏆 Konkurs")
-    kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
-    kb.add("📦 Bazani olish")
+    kb.add("📊 Statistika", "📦 Bazani olish")
+    kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
+    kb.add("🏆 Konkurs", "📤 Post qilish")
+    kb.add("📢 Habar yuborish")
+    kb.add("📥 User qo‘shish", "➕ Admin qo‘shish")
+    kb.add("❌ Kodni o‘chirish", "📘 Qo‘llanma", "📡 Kanal boshqaruvi")
 
     await message.answer(f"❌Amal bekor qilindi‼️", 
                          reply_markup=kb, parse_mode="HTML")
@@ -909,7 +908,7 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
 
         download_btn = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("📥 Yuklab olish", url=f"https://t.me/{BOT_USERNAME}?start={code}")
+            InlineKeyboardButton("✨Yuklab olish✨", url=f"https://t.me/{BOT_USERNAME}?start={code}")
         )
 
         try:
@@ -979,7 +978,7 @@ async def get_post_link(message: types.Message, state: FSMContext):
     link = message.text.strip()
 
     button = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("📥 Yuklab olish", url=link)
+        InlineKeyboardButton("✨Yuklab olish✨", url=link)
     )
 
     try:
