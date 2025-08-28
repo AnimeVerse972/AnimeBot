@@ -11,7 +11,8 @@ db_pool = None
 async def init_db():
     global db_pool
     db_pool = await asyncpg.create_pool(
-        dsn=os.getenv("DATABASE_URL")  # faqat URL orqali ulanish
+        dsn=os.getenv("DATABASE_URL"),
+        statement_cache_size=0
     )
 
     async with db_pool.acquire() as conn:
