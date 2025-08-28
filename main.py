@@ -425,7 +425,7 @@ async def show_all_animes(message: types.Message):
 @dp.message_handler(lambda m: m.text == "✉️ Admin bilan bog‘lanish")
 async def contact_admin(message: types.Message):
     await UserStates.waiting_for_admin_message.set()
-    await message.answer("✍️ Adminlarga yubormoqchi bo‘lgan xabaringizni yozing.\n\n📡 Boshqarish uchun '📡 Boshqarish' tugmasini bosing.", reply_markup=control_keyboard())
+    await message.answer("✍️ Adminlarga yubormoqchi bo‘lgan xabaringizni yozing.\n\n📡 Bekor qilish uchun '📡 Boshqarish' tugmasini bosing.", reply_markup=control_keyboard())
 
 @dp.message_handler(state=UserStates.waiting_for_admin_message)
 async def forward_to_admins(message: types.Message, state: FSMContext):
@@ -485,11 +485,67 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
         await state.finish()
 
 # === Admin qo'shish===
-@dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
-async def add_admin_start(message: types.Message):
-    await message.answer("🆔 Yangi adminning Telegram ID raqamini yuboring.", reply_markup=control_keyboard())
-    await AdminStates.waiting_for_admin_id.set()
+# === 📡 Adminlar boshqaruvi ===
+@dp.message_handler(lambda m: m.text == "📡 Adminlar", user_id=ADMINS)
+async def manage_admins(message: types.Message):
+    kb = InlineKeyboardMarkup()
+    kb.add(
+        InlineKeyboardButton("➕ Yangi admin qo‘shish", callback_data="admin_action:add"),
+        InlineKeyboardButton("📋 Adminlar ro‘yxati", callback_data="admin_action:list")
+    )
+    kb.add(InlineKeyboardButton("❌ Admin o‘chirish", callback_data="admin_action:delete"))
+    kb.add(InlineKeyboardButton("⬅️ Orqaga", callback_data="admin_action:back"))
+    await message.answer("👮‍♂️ Adminlar boshqaruvi:", reply_markup=kb)
 
+
+# === Adminlar callback handleri ===
+@dp.callback_query_handler(lambda c: c.data.startswith("admin_action:"), user_id=ADMINS)
+async def admin_actions(callback: types.CallbackQuery, state: FSMContext):
+    action = callback.data.split(":")[1]
+
+    if action == "add":
+        await AdminStates.waiting_for_admin_id.set()
+        await callback.message.answer("🆔 Yangi adminning Telegram ID raqamini yuboring.", reply_markup=control_keyboard())
+
+    elif action == "list":
+        if not ADMINS:
+            await callback.message.answer("📭 Hozircha admin yo‘q.")
+        else:
+            text = "📋 Adminlar ro‘yxati:\n\n"
+            for i, admin_id in enumerate(ADMINS, 1):
+                text += f"{i}. <code>{admin_id}</code>\n"
+            await callback.message.answer(text, parse_mode="HTML")
+
+    elif action == "delete":
+        if not ADMINS:
+            await callback.message.answer("📭 Hozircha admin yo‘q.")
+            await callback.answer()
+            return
+
+        kb = InlineKeyboardMarkup()
+        for admin_id in ADMINS:
+            kb.add(InlineKeyboardButton(f"❌ O‘chirish: {admin_id}", callback_data=f"deladmin:{admin_id}"))
+        await callback.message.answer("❌ Qaysi adminni o‘chirmoqchisiz?", reply_markup=kb)
+
+    elif action == "back":
+        await callback.message.edit_text("🔙 Admin panelga qaytdingiz.", reply_markup=admin_keyboard())
+
+    await callback.answer()
+
+
+# === Admin o‘chirish callback ===
+@dp.callback_query_handler(lambda c: c.data.startswith("deladmin:"), user_id=ADMINS)
+async def delete_admin(callback: types.CallbackQuery):
+    admin_id = int(callback.data.split(":", 1)[1])
+    if admin_id in ADMINS:
+        ADMINS.remove(admin_id)
+        await callback.message.edit_text(f"✅ Admin <code>{admin_id}</code> o‘chirildi.", parse_mode="HTML")
+    else:
+        await callback.message.edit_text("⚠️ Bu admin topilmadi.")
+    await callback.answer()
+
+
+# === Admin qo‘shish handleri ===
 @dp.message_handler(state=AdminStates.waiting_for_admin_id, user_id=ADMINS)
 async def add_admin_process(message: types.Message, state: FSMContext):
     if message.text == "📡 Boshqarish":
@@ -499,7 +555,7 @@ async def add_admin_process(message: types.Message, state: FSMContext):
 
     await state.finish()
     text = message.text.strip()
-    
+
     if not text.isdigit():
         await message.answer("❗ Faqat raqam yuboring (Telegram user ID).")
         return
