@@ -851,7 +851,7 @@ async def anime_genres(message: types.Message, state: FSMContext):
     await message.answer("➤ 60 sekundgacha bo‘lgan videoni yuboring:")
 
 # 6️⃣ Video qabul qilish va bazaga saqlash
-@dp.message_handler(content_types=types.ContentType.VIDEO, state=AdminStates.waiting_for_video)
+@dp.message_handler(content_types=["video"], state=AdminStates.waiting_for_video)
 async def anime_video(message: types.Message, state: FSMContext):
     data = await state.get_data()
     video = message.video
@@ -860,11 +860,9 @@ async def anime_video(message: types.Message, state: FSMContext):
         await message.answer("❌ Video 60 sekunddan uzun bo‘lmasligi kerak.")
         return
 
-    # Oxirgi kodni olish va yangi kodi tayyorlash
-    last_code = await get_last_anime_code()  # bazadan oxirgi kodni oladi
+    last_code = await get_last_anime_code()
     new_code = last_code + 1 if last_code else 1
 
-    # Caption tayyorlash
     caption = (
         f"{data['name']}\n"
         f"──────────────────────\n"
@@ -879,7 +877,6 @@ async def anime_video(message: types.Message, state: FSMContext):
         f"──────────────────────"
     )
 
-    # Bazaga saqlash
     await add_anime_code(
         code=new_code,
         title=data['name'],
@@ -891,9 +888,11 @@ async def anime_video(message: types.Message, state: FSMContext):
         caption=caption
     )
 
-    await message.answer(f"✅ Anime qo‘shildi.\n📌 Ushbu anime kodi: <code>{new_code}</code>", parse_mode="HTML")
+    await message.answer(
+        f"✅ Anime qo‘shildi.\n📌 Ushbu anime kodi: <code>{new_code}</code>",
+        parse_mode="HTML"
+    )
     await state.finish()
-
 # ➕ Anime yuborish boshlash
 @dp.message_handler(lambda m: m.text == "📤 Animeni yuborish")
 async def send_anime_start(message: types.Message):
