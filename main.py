@@ -838,7 +838,7 @@ async def anime_status(message: types.Message, state: FSMContext):
     await message.answer("➤ Kim ovoz berganini yozing (masalan: Hoshino dubbing):")
 
 # 4️⃣ Kim ovoz bergan
-@dp.message_handler(state=AdminStates.waiting_for_vote)
+@dp.message_handler(state=AdminStates.waiting_for_voice)
 async def anime_vote(message: types.Message, state: FSMContext):
     await state.update_data(vote=message.text)
     await AdminStates.waiting_for_genres.set()
@@ -871,7 +871,7 @@ async def anime_video(message: types.Message, state: FSMContext):
         f"──────────────────────\n"
         f"➤ Mavsum: 1\n"
         f"➤ Holati: {data['status']}\n"
-        f"➤ Ovoz berdi: {data['vote']}\n"
+        f"➤ Ovoz berdi: {data['voice']}\n"
         f"➤ Qismi: {data['parts']}/qism yuklandi✅\n"
         f"➤ Kanal: @YourChannel\n"
         f"➤ Tili: Oʻzbekcha\n"
@@ -886,7 +886,7 @@ async def anime_video(message: types.Message, state: FSMContext):
         title=data['name'],
         parts=data['parts'],
         status=data['status'],
-        vote=data['vote'],
+        vote=data['voice'],
         genres=data['genres'],
         video_file_id=video.file_id,
         caption=caption
