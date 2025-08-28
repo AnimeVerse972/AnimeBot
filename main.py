@@ -839,7 +839,7 @@ async def anime_status(message: types.Message, state: FSMContext):
 # 4️⃣ Kim ovoz bergan
 @dp.message_handler(state=AdminStates.waiting_for_voice)
 async def anime_vote(message: types.Message, state: FSMContext):
-    await state.update_data(vote=message.text)
+    await state.update_data(voice=message.text)
     await AdminStates.waiting_for_genres.set()
     await message.answer("➤ Janrlarini kiriting (#drama #sport ...):")
 
