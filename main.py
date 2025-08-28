@@ -833,7 +833,7 @@ async def anime_status(message: types.Message, state: FSMContext):
     status = message.text.strip()
     await state.update_data(status=status)
 
-    await AdminStates.waiting_for_vote.set()
+    await AdminStates.waiting_for_voice.set()
     await message.answer("➤ Kim ovoz berganini yozing (masalan: Hoshino dubbing):")
 
 # 4️⃣ Kim ovoz bergan
