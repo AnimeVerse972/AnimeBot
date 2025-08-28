@@ -831,10 +831,8 @@ async def anime_parts(message: types.Message, state: FSMContext):
 @dp.message_handler(state=AdminStates.waiting_for_status)
 async def anime_status(message: types.Message, state: FSMContext):
     status = message.text.strip()
-    if status.lower() not in ["tugallangan", "davom etmoqda", "ongoing"]:
-        await message.answer("❌ Iltimos, 'Tugallangan' yoki 'Davom etmoqda' yozing.")
-        return
     await state.update_data(status=status)
+
     await AdminStates.waiting_for_vote.set()
     await message.answer("➤ Kim ovoz berganini yozing (masalan: Hoshino dubbing):")
 
