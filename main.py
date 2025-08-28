@@ -91,25 +91,32 @@ async def start_handler(message: types.Message):
     user_id = message.from_user.id
     args = (message.get_args() or "").strip()
 
+    # Foydalanuvchini bazaga qo'shamiz
     try:
         await add_user(user_id)
     except Exception as e:
         print(f"[add_user] {user_id} -> {e}")
-    try:
-        unsubscribed = await get_unsubscribed_channels(user_id) if 'get_unsubscribed_channels' in globals() else []
-    except Exception as e:
-        print(f"[subs_check] {user_id} -> {e}")
-        unsubscribed = []
 
-    if unsubscribed:
-        # faqat obuna bo‘lmaganlarni chiqaramiz
-        markup = await make_unsubscribed_markup(user_id, args)
-        await message.answer(
-            "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
-            reply_markup=markup
-        )
-        return
-        
+    # Telegramdan bot egasini aniqlash
+    bot_info = await bot.get_me()
+    owner_id = bot_info.id  # bot egasi avtomatik aniqlanadi
+
+    # Adminlar va egani tekshirish
+    admins = await get_all_admins()
+    is_admin_or_owner = user_id in admins or user_id == owner_id
+
+    # Oddiy foydalanuvchilar uchun obuna tekshirish
+    if not is_admin_or_owner:
+        unsubscribed = await get_unsubscribed_channels(user_id)
+        if unsubscribed:
+            markup = await make_unsubscribed_markup(user_id, args)
+            await message.answer(
+                "❗ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo‘ling:",
+                reply_markup=markup
+            )
+            return
+
+    # Agar start argumenti bo'lsa (post kodi)
     if args and args.isdigit():
         code = args
         try:
@@ -122,23 +129,23 @@ async def start_handler(message: types.Message):
             print(f"[send_reklama_post] {user_id}, code={code} -> {e}")
             await message.answer("⚠️ Postni yuborishda muammo bo‘ldi. Keyinroq urinib ko‘ring.")
         return
-        
-    try:
-        if user_id in ADMINS:
-            await message.answer(f"👮‍♂️ Admin panel:\n🆔 Sizning ID: <code>{user_id}</code>", reply_markup=admin_keyboard(), parse_mode="HTML")
-        else:
-            kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            kb.add(
-                KeyboardButton("🎞 Barcha animelar"),
-                KeyboardButton("✉️ Admin bilan bog‘lanish")
-            )
-            await message.answer(
-                f"✨",
-                reply_markup=kb,
-                parse_mode="HTML"
-            )
-    except Exception as e:
-        print(f"[menu] {user_id} -> {e}")
+
+    # Klaviaturani tayyorlash
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb.add(
+        KeyboardButton("🎞 Barcha animelar"),
+        KeyboardButton("✉️ Admin bilan bog‘lanish")
+    )
+
+    # Agar admin yoki egasi bo'lsa, pastga boshqarish tugmasi qo‘shiladi
+    if is_admin_or_owner:
+        kb.add(KeyboardButton("📡 Boshqarish"))
+
+    await message.answer(
+        "✨ Botga xush kelibsiz!",
+        reply_markup=kb
+    )
+
 
 # === Obuna tekshirish uchun yordamchi funksiyalar (agar mavjud bo'lsa) ===
 async def make_subscribe_markup(code):
