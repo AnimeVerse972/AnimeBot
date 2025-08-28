@@ -33,7 +33,6 @@ async def init_db():
                 message_id INTEGER,
                 post_count INTEGER,
                 parts INTEGER,
-                status TEXT,
                 voice TEXT,
                 genres TEXT[],
                 video_file_id TEXT,
@@ -97,8 +96,7 @@ async def add_kino_code(code, channel, message_id, post_count, title, parts=None
                 post_count = EXCLUDED.post_count,
                 title = EXCLUDED.title,
                 parts = EXCLUDED.parts,
-                status = EXCLUDED.status,
-                voice = EXCLUDED.vote,
+                voice = EXCLUDED.voice,
                 genres = EXCLUDED.genres,
                 video_file_id = EXCLUDED.video_file_id,
                 caption = EXCLUDED.caption;
