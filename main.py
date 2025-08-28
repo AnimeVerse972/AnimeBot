@@ -44,6 +44,14 @@ class AdminStates(StatesGroup):
     waiting_for_broadcast_data = State()
     waiting_for_admin_id = State()
     waiting_for_user_list = State()
+    waiting_for_name = State()       # Anime nomi
+    waiting_for_parts = State()      # Qismlar soni
+    waiting_for_status = State()     # Tugallangan yoki davom etmoqda
+    waiting_for_voice = State()      # Kim ovoz bergan
+    waiting_for_genres = State()     # Janrlar (#action #drama ...)
+    waiting_for_language = State()   # Tili (O‘zbekcha, Ruscha...)
+    waiting_for_year = State()       # Yili (2008, 2015...)
+    waiting_for_video = State()
 
 class AdminReplyStates(StatesGroup):
     waiting_for_reply_message = State()
@@ -63,17 +71,6 @@ class PostStates(StatesGroup):
     
 class KanalStates(StatesGroup):
     waiting_for_channel = State()
-
-# 🔥 Anime qo‘shish uchun yangi FSM
-class AnimeStates(StatesGroup):
-    waiting_for_name = State()       # Anime nomi
-    waiting_for_parts = State()      # Qismlar soni
-    waiting_for_status = State()     # Tugallangan yoki davom etmoqda
-    waiting_for_voice = State()      # Kim ovoz bergan
-    waiting_for_genres = State()     # Janrlar (#action #drama ...)
-    waiting_for_language = State()   # Tili (O‘zbekcha, Ruscha...)
-    waiting_for_year = State()       # Yili (2008, 2015...)
-    waiting_for_video = State()      # 60 sekundlik video
 
 # === Klaviaturalar: Admin va Boshqarish ===
 def admin_keyboard():
