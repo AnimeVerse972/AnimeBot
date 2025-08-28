@@ -60,7 +60,7 @@ async def init_db():
 
 
 # === Foydalanuvchilar bilan ishlash ===
-async def add_user(user_id):
+async def add_user(user_id: int):
     async with db_pool.acquire() as conn:
         await conn.execute(
             "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT DO NOTHING", user_id
