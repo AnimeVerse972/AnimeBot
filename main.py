@@ -52,6 +52,7 @@ class AdminStates(StatesGroup):
     waiting_for_language = State()   # Tili (O‘zbekcha, Ruscha...)
     waiting_for_year = State()       # Yili (2008, 2015...)
     waiting_for_video = State()
+    waiting_for_anime_code = State()
 
 class AdminReplyStates(StatesGroup):
     waiting_for_reply_message = State()
