@@ -523,13 +523,39 @@ async def admin_actions(callback: types.CallbackQuery, state: FSMContext):
 
         kb = InlineKeyboardMarkup()
         for admin_id in ADMINS:
+            # Siz o'zingizni o'chirib bo'lmaydi
+            if admin_id == callback.from_user.id:
+                continue
             kb.add(InlineKeyboardButton(f"❌ O‘chirish: {admin_id}", callback_data=f"deladmin:{admin_id}"))
-        await callback.message.answer("❌ Qaysi adminni o‘chirmoqchisiz?", reply_markup=kb)
+
+        if not kb.inline_keyboard:
+            await callback.message.answer("ℹ️ Sizni o‘chiradigan admin yo‘q.")
+        else:
+            await callback.message.answer("❌ Qaysi adminni o‘chirmoqchisiz?", reply_markup=kb)
 
     elif action == "back":
         await callback.message.edit_text("🔙 Admin panelga qaytdingiz.", reply_markup=admin_keyboard())
 
     await callback.answer()
+
+
+# === Adminni o‘chirish callback handleri ===
+@dp.callback_query_handler(lambda c: c.data.startswith("deladmin:"), user_id=ADMINS)
+async def delete_admin_confirm(callback: types.CallbackQuery):
+    admin_id = int(callback.data.split(":")[1])
+    # Sizni o'chirib bo'lmaydi
+    if admin_id == callback.from_user.id:
+        await callback.answer("❌ Sizni o‘chirib bo‘lmaydi!", show_alert=True)
+        return
+
+    if admin_id in ADMINS:
+        ADMINS.remove(admin_id)
+        await callback.message.edit_text(f"✅ Admin {admin_id} o‘chirildi.")
+    else:
+        await callback.message.edit_text("⚠️ Admin topilmadi.")
+
+    await callback.answer()
+
 
 
 # === Admin o‘chirish callback ===
