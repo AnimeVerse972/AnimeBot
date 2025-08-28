@@ -68,7 +68,7 @@ class KanalStates(StatesGroup):
 def admin_keyboard():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("➕ Anime qo‘shish")
-    kb.add("📊 Statistika", "➕ Admin qo‘shish")
+    kb.add("📊 Statistika", "👮‍♂️ Adminlar")
     kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
     kb.add("🏆 Konkurs", "📤 Post qilish")
     kb.add("📢 Habar yuborish")
@@ -484,9 +484,8 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
     finally:
         await state.finish()
 
-# === Admin qo'shish===
 # === 📡 Adminlar boshqaruvi ===
-@dp.message_handler(lambda m: m.text == "📡 Adminlar", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "👮‍♂️ Adminlar", user_id=ADMINS)
 async def manage_admins(message: types.Message):
     kb = InlineKeyboardMarkup()
     kb.add(
