@@ -794,61 +794,157 @@ async def kino_button(callback: types.CallbackQuery):
     await bot.copy_message(callback.from_user.id, channel, base_id + number - 1)
     await callback.answer()
 
-# === ➕ Anime qo‘shish
+# === ➕ Anime qo‘shish bosqichlari ===
 @dp.message_handler(lambda m: m.text == "➕ Anime qo‘shish")
-async def add_start(message: types.Message):
+async def add_anime_start(message: types.Message):
     if message.from_user.id in ADMINS:
-        await AdminStates.waiting_for_kino_data.set()
-        await message.answer("📝 Format: `KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\nMasalan: `91 @MyKino 4 12 naruto`", parse_mode="Markdown", reply_markup=control_keyboard())
+        await AdminStates.waiting_for_name.set()
+        await message.answer("📝 Anime nomini kiriting:")
 
-@dp.message_handler(state=AdminStates.waiting_for_kino_data)
-async def add_kino_handler(message: types.Message, state: FSMContext):
-    if message.text == "📡 Boshqarish":
-        await state.finish()
-        await send_admin_panel(message)
+# 1️⃣ Anime nomi
+@dp.message_handler(state=AdminStates.waiting_for_name)
+async def anime_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    await AdminStates.waiting_for_parts.set()
+    await message.answer("➤ Qismlar sonini kiriting (masalan: 12):")
+
+# 2️⃣ Qismlar soni
+@dp.message_handler(state=AdminStates.waiting_for_parts)
+async def anime_parts(message: types.Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("❌ Iltimos, son kiriting.")
+        return
+    await state.update_data(parts=int(message.text))
+    await AdminStates.waiting_for_status.set()
+    await message.answer("➤ Holati: Tugallangan / Davom etmoqda (Tugallangan/Ongoing)")
+
+# 3️⃣ Holati
+@dp.message_handler(state=AdminStates.waiting_for_status)
+async def anime_status(message: types.Message, state: FSMContext):
+    status = message.text.strip()
+    if status.lower() not in ["tugallangan", "davom etmoqda", "ongoing"]:
+        await message.answer("❌ Iltimos, 'Tugallangan' yoki 'Davom etmoqda' yozing.")
+        return
+    await state.update_data(status=status)
+    await AdminStates.waiting_for_vote.set()
+    await message.answer("➤ Kim ovoz berganini yozing (masalan: Hoshino dubbing):")
+
+# 4️⃣ Kim ovoz bergan
+@dp.message_handler(state=AdminStates.waiting_for_vote)
+async def anime_vote(message: types.Message, state: FSMContext):
+    await state.update_data(vote=message.text)
+    await AdminStates.waiting_for_genres.set()
+    await message.answer("➤ Janrlarini kiriting (#drama #sport ...):")
+
+# 5️⃣ Janrlari
+@dp.message_handler(state=AdminStates.waiting_for_genres)
+async def anime_genres(message: types.Message, state: FSMContext):
+    await state.update_data(genres=message.text)
+    await AdminStates.waiting_for_video.set()
+    await message.answer("➤ 60 sekundgacha bo‘lgan videoni yuboring:")
+
+# 6️⃣ Video qabul qilish va bazaga saqlash
+@dp.message_handler(content_types=types.ContentType.VIDEO, state=AdminStates.waiting_for_video)
+async def anime_video(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    video = message.video
+
+    if video.duration > 60:
+        await message.answer("❌ Video 60 sekunddan uzun bo‘lmasligi kerak.")
         return
 
-    rows = message.text.strip().split("\n")
+    # Oxirgi kodni olish va yangi kodi tayyorlash
+    last_code = await get_last_anime_code()  # bazadan oxirgi kodni oladi
+    new_code = last_code + 1 if last_code else 1
+
+    # Caption tayyorlash
+    caption = (
+        f"{data['name']}\n"
+        f"──────────────────────\n"
+        f"➤ Mavsum: 1\n"
+        f"➤ Holati: {data['status']}\n"
+        f"➤ Ovoz berdi: {data['vote']}\n"
+        f"➤ Qismi: {data['parts']}/qism yuklandi✅\n"
+        f"➤ Kanal: @YourChannel\n"
+        f"➤ Tili: Oʻzbekcha\n"
+        f"➤ Yili: 2008\n"
+        f"➤ Janri: {data['genres']}\n"
+        f"──────────────────────"
+    )
+
+    # Bazaga saqlash
+    await add_anime_code(
+        code=new_code,
+        title=data['name'],
+        parts=data['parts'],
+        status=data['status'],
+        vote=data['vote'],
+        genres=data['genres'],
+        video_file_id=video.file_id,
+        caption=caption
+    )
+
+    await message.answer(f"✅ Anime qo‘shildi.\n📌 Ushbu anime kodi: <code>{new_code}</code>", parse_mode="HTML")
+    await state.finish()
+
+# ➕ Anime yuborish boshlash
+@dp.message_handler(lambda m: m.text == "📤 Animeni yuborish")
+async def send_anime_start(message: types.Message):
+    if message.from_user.id in ADMINS:
+        await AdminStates.waiting_for_anime_code.set()
+        await message.answer("📝 Qaysi animeni yubormoqchisiz? Kodini kiriting:", reply_markup=control_keyboard())
+
+# Kodni qabul qilish va yuborish
+@dp.message_handler(state=AdminStates.waiting_for_anime_code)
+async def send_anime_handler(message: types.Message, state: FSMContext):
+    code = message.text.strip()
+    
+    # Bazadan animeni olish
+    anime = await get_anime_by_code(code)  # Sizning bazadagi funksiyangiz
+    if not anime:
+        await message.answer("❌ Bunday kod topilmadi. Iltimos, to‘g‘ri kod kiriting.")
+        return
+
+    # Caption yaratish
+    caption = f"""
+{anime['title']}
+──────────────────────
+➤ Mavsum: {anime['season']}
+➤ Holati: {anime['status']}
+➤ Ovoz berdi: {anime['voice']}
+➤ Qismi: {anime['current_part']}/{anime['total_parts']}-qism yuklandi✅
+➤ Kanal: {anime['channel']}
+➤ Tili: {anime['language']}
+➤ Yili: {anime['year']}
+➤ Janri: {' '.join([f'#{g}' for g in anime['genres']])}
+──────────────────────
+"""
+
+    # Inline tugma yaratish
+    watch_btn = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("🔹Tomosha qilish🔹", url=f"https://t.me/{BOT_USERNAME}?start={code}")
+    )
+
+    # Asosiy kanallarga yuborish
     successful = 0
     failed = 0
-    for row in rows:
-        parts = row.strip().split()
-        if len(parts) < 5:
-            failed += 1
-            continue
-
-        code, server_channel, reklama_id, post_count = parts[:4]
-        title = " ".join(parts[4:])
-
-        if not (code.isdigit() and reklama_id.isdigit() and post_count.isdigit()):
-            failed += 1
-            continue
-
-        reklama_id = int(reklama_id)
-        post_count = int(post_count)
-
-        await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
-
-        download_btn = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("✨Yuklab olish✨", url=f"https://t.me/{BOT_USERNAME}?start={code}")
-        )
-
+    for ch in MAIN_CHANNELS:
         try:
-            for ch in MAIN_CHANNELS:
-                await bot.copy_message(
-                    chat_id=ch,
-                    from_chat_id=server_channel,
-                    message_id=reklama_id,
-                    reply_markup=download_btn
-                )
+            await bot.send_video(
+                chat_id=ch,
+                video=anime['file_id'],
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=watch_btn
+            )
             successful += 1
         except Exception as e:
-            print(f"[add_kino_handler] {e}")
+            print(f"[send_anime_handler] {e}")
             failed += 1
 
-    await message.answer(f"✅ Yangi kodlar qo‘shildi:\n\n✅ Muvaffaqiyatli: {successful}\n❌ Xatolik: {failed}", reply_markup=admin_keyboard())
+    await message.answer(f"✅ Anime yuborildi!\n\n📡 Muvaffaqiyatli kanallar: {successful}\n❌ Xatolik: {failed}", reply_markup=admin_keyboard())
     await state.finish()
-    
+
 # === Kodlar ro‘yxat
 @dp.message_handler(lambda m: m.text == "📄 Kodlar ro‘yxati")
 async def show_all_animes(message: types.Message):
