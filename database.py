@@ -139,7 +139,7 @@ async def update_anime_code(old_code, new_code, new_title):
 async def get_last_anime_code():
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow("SELECT code FROM kino_codes ORDER BY code DESC LIMIT 1")
-        return row['code'] if row else None
+        return row['code'] if row else 0
 
 # === Statistika bilan ishlash ===
 async def increment_stat(code, field):
