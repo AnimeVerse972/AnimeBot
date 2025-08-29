@@ -864,29 +864,17 @@ async def anime_video(message: types.Message, state: FSMContext):
         last_code = row['code'] if row else 0
         new_code = last_code + 1
 
-    caption = (
-        f"{data['name']}
-"
-        f"──────────────────────
-"
-        f"➤ Mavsum: 1
-"
-        f"➤ Holati: {data['status']}
-"
-        f"➤ Ovoz berdi: {data['voice']}
-"
-        f"➤ Qismi: {data['parts']}/qism yuklandi✅
-"
-        f"➤ Kanal: @YourChannel
-"
-        f"➤ Tili: Oʻzbekcha
-"
-        f"➤ Yili: 2008
-"
-        f"➤ Janri: {data['genres']}
-"
-        f"──────────────────────"
-    )
+    caption = f"""{data['name']}
+──────────────────────
+➤ Mavsum: 1
+➤ Holati: {data['status']}
+➤ Ovoz berdi: {data['voice']}
+➤ Qismi: {data['parts']}/qism yuklandi✅
+➤ Kanal: @YourChannel
+➤ Tili: Oʻzbekcha
+➤ Yili: 2008
+➤ Janri: {data['genres']}
+──────────────────────"""
 
     await add_kino_code(
         code=new_code,
