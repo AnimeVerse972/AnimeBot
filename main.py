@@ -858,8 +858,11 @@ async def anime_video(message: types.Message, state: FSMContext):
         await message.answer("❌ Video 60 sekunddan uzun bo‘lmasligi kerak.")
         return
 
-    last_code = await get_last_anime_code()
-    new_code = last_code + 1 if last_code else 1
+    # Oxirgi code ni pool orqali olish
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT code FROM kino_codes ORDER BY code DESC LIMIT 1")
+        last_code = row['code'] if row else 0
+        new_code = last_code + 1
 
     caption = (
         f"{data['name']}\n"
@@ -868,26 +871,31 @@ async def anime_video(message: types.Message, state: FSMContext):
         f"➤ Holati: {data['status']}\n"
         f"➤ Ovoz berdi: {data['voice']}\n"
         f"➤ Qismi: {data['parts']}/qism yuklandi✅\n"
+        f"➤ Kanal: @YourChannel\n"
+        f"➤ Tili: Oʻzbekcha\n"
+        f"➤ Yili: 2008\n"
         f"➤ Janri: {data['genres']}\n"
         f"──────────────────────"
     )
 
-    await add_anime_code(
+    # Kino_codes ga qo‘shish
+    await add_kino_code(
         code=new_code,
+        channel="@YourChannel",
+        message_id=0,
+        post_count=0,
         title=data['name'],
         parts=data['parts'],
         status=data['status'],
-        vote=data['voice'],
-        genres=data['genres'],
+        voice=data['voice'],
+        genres=data['genres'].split(),  # janrlarni listga ajratish
         video_file_id=video.file_id,
         caption=caption
     )
 
-    await message.answer(
-        f"✅ Anime qo‘shildi.\n📌 Ushbu anime kodi: <code>{new_code}</code>",
-        parse_mode="HTML"
-    )
+    await message.answer("✅ Anime muvaffaqiyatli qo‘shildi!")
     await state.finish()
+
 # ➕ Anime yuborish boshlash
 @dp.message_handler(lambda m: m.text == "📤 Animeni yuborish")
 async def send_anime_start(message: types.Message):
