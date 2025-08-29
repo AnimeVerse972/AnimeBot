@@ -224,7 +224,7 @@ async def list_codes(message: types.Message):
     if not codes:
         await message.answer("❌ Hozircha animelar yo'q.")
         return
-    text = "📄 Barcha animelar:
+    text = "📄 Barcha animelar:\n"
 "
     for c in codes:
         text += f"`{c['code']}` — {c['title']}
