@@ -20,7 +20,7 @@ from aiogram.utils.markdown import escape_md
 # === 📂 Loyihaga tegishli modullar ===
 from konkurs import register_konkurs_handlers
 from keep_alive import keep_alive
-from database import db_pool, init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code, get_today_users, get_last_anime_code
+from database import get_db_pool, init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code, get_today_users, get_last_anime_code
 
 
 load_dotenv()
@@ -853,32 +853,41 @@ async def anime_genres(message: types.Message, state: FSMContext):
 async def anime_video(message: types.Message, state: FSMContext):
     data = await state.get_data()
     video = message.video
-
     if video.duration > 60:
         await message.answer("❌ Video 60 sekunddan uzun bo‘lmasligi kerak.")
         return
 
-    # Oxirgi code ni pool orqali olish
-    async with db_pool.acquire() as conn:
+    # ✅ db_pool o'rniga get_db_pool() dan foydalanamiz
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT code FROM kino_codes ORDER BY code DESC LIMIT 1")
         last_code = row['code'] if row else 0
         new_code = last_code + 1
 
     caption = (
-        f"{data['name']}\n"
-        f"──────────────────────\n"
-        f"➤ Mavsum: 1\n"
-        f"➤ Holati: {data['status']}\n"
-        f"➤ Ovoz berdi: {data['voice']}\n"
-        f"➤ Qismi: {data['parts']}/qism yuklandi✅\n"
-        f"➤ Kanal: @YourChannel\n"
-        f"➤ Tili: Oʻzbekcha\n"
-        f"➤ Yili: 2008\n"
-        f"➤ Janri: {data['genres']}\n"
+        f"{data['name']}
+"
+        f"──────────────────────
+"
+        f"➤ Mavsum: 1
+"
+        f"➤ Holati: {data['status']}
+"
+        f"➤ Ovoz berdi: {data['voice']}
+"
+        f"➤ Qismi: {data['parts']}/qism yuklandi✅
+"
+        f"➤ Kanal: @YourChannel
+"
+        f"➤ Tili: Oʻzbekcha
+"
+        f"➤ Yili: 2008
+"
+        f"➤ Janri: {data['genres']}
+"
         f"──────────────────────"
     )
 
-    # Kino_codes ga qo‘shish
     await add_kino_code(
         code=new_code,
         channel="@YourChannel",
@@ -888,11 +897,10 @@ async def anime_video(message: types.Message, state: FSMContext):
         parts=data['parts'],
         status=data['status'],
         voice=data['voice'],
-        genres=data['genres'].split(),  # janrlarni listga ajratish
+        genres=data['genres'].split(),
         video_file_id=video.file_id,
         caption=caption
     )
-
     await message.answer("✅ Anime muvaffaqiyatli qo‘shildi!")
     await state.finish()
 
