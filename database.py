@@ -10,6 +10,7 @@ db_pool = None
 async def init_db():
     global db_pool
     try:
+        # ✅ Pool yaratish
         db_pool = await asyncpg.create_pool(
             dsn=os.getenv("DATABASE_URL"),
             statement_cache_size=0
@@ -87,7 +88,7 @@ async def get_user_count():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT COUNT(*) FROM users")
-        return row[0]
+        return row[0] if row else 0
 
 async def get_today_users():
     pool = await get_db_pool()
@@ -135,6 +136,34 @@ async def get_kino_by_code(code: int):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM kino_codes WHERE code = $1", code)
         return dict(row) if row else None
+
+# ✅ YANGI: get_anime_by_code — main.py da ishlatiladi
+async def get_anime_by_code(code: str):
+    """
+    Kod bo'yicha animeni olish.
+    main.py dagi send_anime_handler uchun.
+    """
+    if not code.isdigit():
+        return None
+    code = int(code)
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT title, status, voice, parts AS total_parts, genres, video_file_id
+            FROM kino_codes WHERE code = $1
+        """, code)
+        if not row:
+            return None
+        return {
+            'title': row['title'],
+            'season': 1,
+            'status': row['status'],
+            'voice': row['voice'],
+            'current_part': 1,
+            'total_parts': row['total_parts'],
+            'genres': row['genres'] or [],
+            'file_id': row['video_file_id']
+        }
 
 async def get_all_codes():
     pool = await get_db_pool()
