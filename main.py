@@ -49,8 +49,6 @@ class AdminStates(StatesGroup):
     waiting_for_status = State()     # Tugallangan yoki davom etmoqda
     waiting_for_voice = State()      # Kim ovoz bergan
     waiting_for_genres = State()     # Janrlar (#action #drama ...)
-    waiting_for_language = State()   # Tili (O‘zbekcha, Ruscha...)
-    waiting_for_year = State()       # Yili (2008, 2015...)
     waiting_for_video = State()
     waiting_for_anime_code = State()
 
@@ -870,9 +868,6 @@ async def anime_video(message: types.Message, state: FSMContext):
         f"➤ Holati: {data['status']}\n"
         f"➤ Ovoz berdi: {data['voice']}\n"
         f"➤ Qismi: {data['parts']}/qism yuklandi✅\n"
-        f"➤ Kanal: @YourChannel\n"
-        f"➤ Tili: Oʻzbekcha\n"
-        f"➤ Yili: 2008\n"
         f"➤ Janri: {data['genres']}\n"
         f"──────────────────────"
     )
@@ -919,9 +914,6 @@ async def send_anime_handler(message: types.Message, state: FSMContext):
 ➤ Holati: {anime['status']}
 ➤ Ovoz berdi: {anime['voice']}
 ➤ Qismi: {anime['current_part']}/{anime['total_parts']}-qism yuklandi✅
-➤ Kanal: {anime['channel']}
-➤ Tili: {anime['language']}
-➤ Yili: {anime['year']}
 ➤ Janri: {' '.join([f'#{g}' for g in anime['genres']])}
 ──────────────────────
 """
