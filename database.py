@@ -92,11 +92,10 @@ async def get_user_count():
 async def get_today_users():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        today = conn._protocol._loop.time()
         row = await conn.fetchrow("""
             SELECT COUNT(*) FROM users WHERE DATE(created_at) = CURRENT_DATE
         """)
-        return row[0]
+        return row[0] if row else 0
 
 async def get_all_user_ids():
     pool = await get_db_pool()
