@@ -120,6 +120,43 @@ async def get_kino_by_code(code):
         row = await conn.fetchrow("SELECT * FROM kino_codes WHERE code=$1", code)
         return dict(row) if row else None
 
+# database.py yoki asosiy modulga qo'shing
+async def get_anime_by_code(code: str):
+    """
+    Kod bo'yicha animeni bazadan olish.
+    Natija dict shaklida qaytadi:
+    {
+        'title': str,
+        'season': int,
+        'status': str,
+        'voice': str,
+        'current_part': int,
+        'total_parts': int,
+        'genres': list[str],
+        'file_id': str
+    }
+    """
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT title, status, voice, parts AS total_parts, genres, video_file_id
+            FROM kino_codes
+            WHERE code = $1
+        """, code)
+
+        if not row:
+            return None
+
+        return {
+            'title': row['title'],
+            'season': 1,  # default qiymat
+            'status': row['status'],
+            'voice': row['voice'],
+            'current_part': 1,  # default qiymat
+            'total_parts': row['total_parts'],
+            'genres': row['genres'] if row['genres'] else [],
+            'file_id': row['video_file_id']
+        }
+
 async def get_all_codes():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT * FROM kino_codes ORDER BY code")
