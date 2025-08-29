@@ -182,22 +182,25 @@ async def anime_genres(message: types.Message, state: FSMContext):
     await AddAnimeStates.waiting_for_code.set()
     await message.answer("🔢 Endi animening kodini kiriting (raqam):", reply_markup=control_keyboard())
 
+
 @dp.message_handler(state=AddAnimeStates.waiting_for_code)
 async def anime_code_input(message: types.Message, state: FSMContext):
+    # Faqat raqam qabul qilamiz
     if not message.text.isdigit():
-        await message.answer("❌ Kod faqat raqamdan iborat bo'lishi kerak.")
+        await message.answer("❌ Kod faqat raqamdan iborat bo'lishi kerak. Qaytadan kiriting:")
         return
 
     code = int(message.text)
     data = await state.get_data()
 
-    # Tekshirish: Bu kod allaqachon mavjudmi?
+    # Tekshirish: kod mavjudmi?
     existing = await get_kino_by_code(code)
     if existing:
-        await message.answer(f"❌ Bu kod allaqachon mavjud: `{code}`\nBoshqa kod kiriting yoki o'chiring.")
-        return
+        await message.answer(f"❌ Bu kod allaqachon mavjud: `{code}`\nIltimos, boshqa kod kiriting:")
+        return  # State tugamaydi, foydalanuvchi yana kirita oladi
 
     try:
+        # Server kanalga yuboramiz
         sent_msg = await bot.send_video(
             chat_id=SERVER_CHANNEL,
             video=data['video_file_id'],
@@ -209,7 +212,7 @@ async def anime_code_input(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
-    # Endi ma'lumotlarni bazaga qo'shamiz
+    # Bazaga qo‘shamiz
     await add_kino_code(
         code=code,
         channel=SERVER_CHANNEL,
