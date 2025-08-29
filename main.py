@@ -155,7 +155,12 @@ async def anime_genres(message: types.Message, state: FSMContext):
         await message.answer("❌ Janrlar bo'sh bo'lishi mumkin emas.")
         return
 
-    await state.update_data(genres=message.text)
+    genres_list = message.text.split()  # Matnni so'zlarga ajratish
+    if not genres_list:
+        await message.answer("❌ Hech qanday janr kiritilmadi.")
+        return
+
+    await state.update_data(genres=genres_list)
 
     data = await state.get_data()
 
@@ -168,7 +173,7 @@ async def anime_genres(message: types.Message, state: FSMContext):
 ➤ Kanal: @YourChannel
 ➤ Tili: Oʻzbekcha
 ➤ Yili: 2008
-➤ Janri: {data['genres']}
+➤ Janri: {" ".join(genres_list)}
 ──────────────────────"""
 
     try:
@@ -195,7 +200,7 @@ async def anime_genres(message: types.Message, state: FSMContext):
         parts=data['parts'],
         status=data['status'],
         voice=data['voice'],
-        genres=data['genres'].split(),
+        genres=genres_list,  # list sifatida
         video_file_id=data['video_file_id'],
         caption=caption
     )
