@@ -210,8 +210,8 @@ async def update_anime_code(old_code: int, new_code: int, new_title: str):
 async def get_last_anime_code():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT code FROM kino_codes ORDER BY code DESC LIMIT 1")
-        return row['code'] if row else 0
+        row = await conn.fetchrow("SELECT MAX(code) FROM anime_codes")
+        return row['max'] if row['max'] is not None else 0
 
 # === Statistika ===
 async def increment_stat(code: int, field: str):
