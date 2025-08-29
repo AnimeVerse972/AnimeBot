@@ -20,7 +20,7 @@ from aiogram.utils.markdown import escape_md
 # === 📂 Loyihaga tegishli modullar ===
 from konkurs import register_konkurs_handlers
 from keep_alive import keep_alive
-from database import init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code, get_today_users
+from database import init_db, add_user, get_user_count, add_kino_code, get_kino_by_code, get_all_codes, delete_kino_code, get_code_stat, increment_stat, get_all_user_ids, update_anime_code, get_today_users, get_last_anime_code
 
 
 load_dotenv()
