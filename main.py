@@ -78,7 +78,7 @@ def admin_keyboard():
     kb.add("📊 Statistika", "👮‍♂️ Adminlar")
     kb.add("📄 Kodlar ro‘yxati", "📈 Kod statistikasi", "✏️ Kodni tahrirlash")
     kb.add("🏆 Konkurs", "📤 Post qilish")
-    kb.add("📢 Habar yuborish")
+    kb.add("📢 Habar yuborish", "📤 Animeni yuborish")
     kb.add("❌ Kodni o‘chirish", "📡 Kanal boshqaruvi")
     return kb
 
