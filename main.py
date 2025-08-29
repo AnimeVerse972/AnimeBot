@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 # === Baza ===
 from database import (
-    init_db, get_db_pool(), add_user, get_user_count, get_today_users, get_all_codes,
+    init_db, get_db_pool, add_user, get_user_count, get_today_users, get_all_codes,
     add_kino_code, get_kino_by_code, delete_kino_code, get_code_stat,
     increment_stat, get_all_user_ids, get_last_anime_code
 )
@@ -24,7 +24,7 @@ load_dotenv()
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = ["@AniVerseClip", "@AniVerseUzDub"]
 MAIN_CHANNELS = ["@anilord_ongoing", "@hoshino_dubbing", "@AniVerseClip"]
-SERVER_CHANNEL = "@aniversebaza"  # .env dan ham olish mumkin
+SERVER_CHANNEL = "@aniversebaza"
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
 bot = Bot(token=API_TOKEN)
@@ -155,7 +155,7 @@ async def anime_genres(message: types.Message, state: FSMContext):
         await message.answer("❌ Janrlar bo'sh bo'lishi mumkin emas.")
         return
 
-    await state.update_data(genres=message.text)  # ✅ Saqlash
+    await state.update_data(genres=message.text)
 
     data = await state.get_data()
 
@@ -202,7 +202,7 @@ async def anime_genres(message: types.Message, state: FSMContext):
 
     await message.answer(f"✅ Anime qo'shildi! Kod: `{new_code}`", reply_markup=admin_keyboard())
     await state.finish()
-    
+
 # === Animeni yuborish ===
 @dp.message_handler(lambda m: m.text == "📤 Animeni yuborish", user_id=ADMINS)
 async def send_anime_start(message: types.Message):
@@ -230,7 +230,7 @@ async def send_anime_handler(message: types.Message, state: FSMContext):
         try:
             await bot.copy_message(
                 chat_id=ch,
-                from_chat_id=anime['channel'],
+                from_chat_id=SERVER_CHANNEL.lstrip('@'),  # @ ni olib tashlash
                 message_id=anime['message_id'],
                 reply_markup=keyboard
             )
