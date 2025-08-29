@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 # === Baza ===
 from database import (
-    init_db, add_user, get_user_count, get_today_users, get_all_codes,
+    init_db, get_db_pool(), add_user, get_user_count, get_today_users, get_all_codes,
     add_kino_code, get_kino_by_code, delete_kino_code, get_code_stat,
     increment_stat, get_all_user_ids, get_last_anime_code
 )
@@ -151,9 +151,14 @@ async def anime_voice(message: types.Message, state: FSMContext):
 
 @dp.message_handler(state=AddAnimeStates.waiting_for_genres)
 async def anime_genres(message: types.Message, state: FSMContext):
+    if not message.text:
+        await message.answer("❌ Janrlar bo'sh bo'lishi mumkin emas.")
+        return
+
+    await state.update_data(genres=message.text)  # ✅ Saqlash
+
     data = await state.get_data()
 
-    # Caption yaratish
     caption = f"""{data['name']}
 ──────────────────────
 ➤ Mavsum: 1
@@ -166,7 +171,6 @@ async def anime_genres(message: types.Message, state: FSMContext):
 ➤ Janri: {data['genres']}
 ──────────────────────"""
 
-    # Server kanalga yuborish
     try:
         sent_msg = await bot.send_video(
             chat_id=SERVER_CHANNEL,
@@ -179,11 +183,9 @@ async def anime_genres(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
-    # Oxirgi kodni olish
     last_code = await get_last_anime_code()
     new_code = last_code + 1
 
-    # Barcha ma'lumotlarni bazaga saqlash
     await add_kino_code(
         code=new_code,
         channel=SERVER_CHANNEL,
@@ -200,7 +202,7 @@ async def anime_genres(message: types.Message, state: FSMContext):
 
     await message.answer(f"✅ Anime qo'shildi! Kod: `{new_code}`", reply_markup=admin_keyboard())
     await state.finish()
-
+    
 # === Animeni yuborish ===
 @dp.message_handler(lambda m: m.text == "📤 Animeni yuborish", user_id=ADMINS)
 async def send_anime_start(message: types.Message):
