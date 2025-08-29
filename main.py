@@ -40,8 +40,9 @@ class AddAnimeStates(StatesGroup):
     waiting_for_parts = State()           # 3. Qismlar
     waiting_for_status = State()          # 4. Holati
     waiting_for_voice = State()           # 5. Ovoz
-    waiting_for_genres = State()          # 6. Janrlar
-
+    waiting_for_genres = State()         # 6. Janrlar
+    waiting_for_code = State() 
+    
 class AdminStates(StatesGroup):
     waiting_for_anime_code = State()
     waiting_for_delete_code = State()
@@ -155,15 +156,15 @@ async def anime_genres(message: types.Message, state: FSMContext):
         await message.answer("❌ Janrlar bo'sh bo'lishi mumkin emas.")
         return
 
-    genres_list = message.text.split()  # Matnni so'zlarga ajratish
+    genres_list = message.text.split()
     if not genres_list:
         await message.answer("❌ Hech qanday janr kiritilmadi.")
         return
 
     await state.update_data(genres=genres_list)
 
+    # Captionni shu joyda saqlash
     data = await state.get_data()
-
     caption = f"""{data['name']}
 ──────────────────────
 ➤ Mavsum: 1
@@ -176,11 +177,31 @@ async def anime_genres(message: types.Message, state: FSMContext):
 ➤ Janri: {" ".join(genres_list)}
 ──────────────────────"""
 
+    await state.update_data(caption=caption)  # Keyinroq ishlatish uchun
+
+    await AddAnimeStates.waiting_for_code.set()
+    await message.answer("🔢 Endi animening kodini kiriting (raqam):", reply_markup=control_keyboard())
+
+@dp.message_handler(state=AddAnimeStates.waiting_for_code)
+async def anime_code_input(message: types.Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("❌ Kod faqat raqamdan iborat bo'lishi kerak.")
+        return
+
+    code = int(message.text)
+    data = await state.get_data()
+
+    # Tekshirish: Bu kod allaqachon mavjudmi?
+    existing = await get_kino_by_code(code)
+    if existing:
+        await message.answer(f"❌ Bu kod allaqachon mavjud: `{code}`\nBoshqa kod kiriting yoki o'chiring.")
+        return
+
     try:
         sent_msg = await bot.send_video(
             chat_id=SERVER_CHANNEL,
             video=data['video_file_id'],
-            caption=caption
+            caption=data['caption']
         )
         server_message_id = sent_msg.message_id
     except Exception as e:
@@ -188,11 +209,9 @@ async def anime_genres(message: types.Message, state: FSMContext):
         await state.finish()
         return
 
-    last_code = await get_last_anime_code()
-    new_code = last_code + 1
-
+    # Endi ma'lumotlarni bazaga qo'shamiz
     await add_kino_code(
-        code=new_code,
+        code=code,
         channel=SERVER_CHANNEL,
         message_id=server_message_id,
         post_count=data['parts'],
@@ -200,12 +219,12 @@ async def anime_genres(message: types.Message, state: FSMContext):
         parts=data['parts'],
         status=data['status'],
         voice=data['voice'],
-        genres=genres_list,  # list sifatida
+        genres=data['genres'],
         video_file_id=data['video_file_id'],
-        caption=caption
+        caption=data['caption']
     )
 
-    await message.answer(f"✅ Anime qo'shildi! Kod: `{new_code}`", reply_markup=admin_keyboard())
+    await message.answer(f"✅ Anime qo'shildi! Kod: `{code}`", reply_markup=admin_keyboard())
     await state.finish()
 
 # === Animeni yuborish ===
