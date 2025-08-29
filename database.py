@@ -32,7 +32,7 @@ async def init_db():
         # === Kino kodlari ===
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS kino_codes (
-                code SERIAL PRIMARY KEY,
+                code INTEGER PRIMARY KEY,
                 title TEXT NOT NULL,
                 channel TEXT,
                 message_id INTEGER,
@@ -90,28 +90,6 @@ async def get_user_count():
         row = await conn.fetchrow("SELECT COUNT(*) FROM users")
         return row[0] if row else 0
 
-async def get_anime_by_code(code: str):
-    if not code.isdigit():
-        return None
-    code = int(code)
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            SELECT title, status, voice, parts AS total_parts, genres, video_file_id
-            FROM kino_codes WHERE code = $1
-        """, code)
-        if not row:
-            return None
-        return {
-            'title': row['title'],
-            'season': 1,
-            'status': row['status'],
-            'voice': row['voice'],
-            'current_part': 1,
-            'total_parts': row['total_parts'],
-            'genres': row['genres'] or [],
-            'file_id': row['video_file_id']
-        }
 
 async def get_today_users():
     pool = await get_db_pool()
@@ -197,8 +175,10 @@ async def get_all_codes():
 async def delete_kino_code(code: int):
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        res = await conn.execute("DELETE FROM kino_codes WHERE code = $1", code)
-        return "1" in res
+        result = await conn.execute("DELETE FROM kino_codes WHERE code = $1", code)
+        # result: 'DELETE 1' yoki 'DELETE 0'
+        deleted_count = int(result.split()[-1])
+        return deleted_count > 0
 
 async def update_anime_code(old_code: int, new_code: int, new_title: str):
     pool = await get_db_pool()
@@ -210,7 +190,7 @@ async def update_anime_code(old_code: int, new_code: int, new_title: str):
 async def get_last_anime_code():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT MAX(code) FROM anime_codes")
+        row = await conn.fetchrow("SELECT MAX(code) FROM kino_codes")
         return row['max'] if row['max'] is not None else 0
 
 # === Statistika ===
