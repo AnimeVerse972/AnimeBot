@@ -34,7 +34,7 @@ load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CHANNELS = ["@AniVerseClip"]
+CHANNELS = []
 MAIN_CHANNELS = []
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
@@ -42,7 +42,7 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-ADMINS = {6486825926}
+ADMINS = {6486825926, 6549594161}
 
 # === KEYBOARDS ===
 def admin_keyboard():
@@ -118,25 +118,20 @@ async def is_user_subscribed(user_id):
             return False
     return True
 
-# === OBUNA BO‘LMAGANLAR MARKUP ===
-async def make_unsubscribed_markup(user_id, code):
-    unsubscribed = await get_unsubscribed_channels(user_id)
+async def make_full_subscribe_markup(code):
     markup = InlineKeyboardMarkup(row_width=1)
-
-    for ch in unsubscribed:
+    for ch in CHANNELS:
         try:
             channel = await bot.get_chat(ch.strip())
             invite_link = channel.invite_link or (await channel.export_invite_link())
             markup.add(InlineKeyboardButton(f"➕ {channel.title}", url=invite_link))
         except Exception as e:
             print(f"❗ Kanalni olishda xatolik: {ch} -> {e}")
-
-    # Tekshirish tugmasi
     markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
     return markup
 
 
-# === /start HANDLER (to‘g‘rilangan) ===
+# === /start HANDLER ===
 @dp.message_handler(commands=['start'])
 async def start_handler(message: types.Message):
     await add_user(message.from_user.id)
@@ -149,7 +144,7 @@ async def start_handler(message: types.Message):
 
         unsubscribed = await get_unsubscribed_channels(message.from_user.id)
         if unsubscribed:
-            markup = await make_unsubscribed_markup(message.from_user.id, code)
+            markup = await get_unsubscribed_channels(code)
             await message.answer(
                 "❗ Animeni olishdan oldin quyidagi homiy kanal(lar)ga obuna bo‘ling:",
                 reply_markup=markup
