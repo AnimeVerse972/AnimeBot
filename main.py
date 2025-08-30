@@ -34,7 +34,7 @@ load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CHANNELS = [@AniVerseUzDub]
+CHANNELS = ["@AniVerseUzDub"]
 MAIN_CHANNELS = []
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
@@ -42,7 +42,7 @@ bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-ADMINS = {6486825926, 6549594161}
+ADMINS = {6486825926}
 
 # === KEYBOARDS ===
 def admin_keyboard():
