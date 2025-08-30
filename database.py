@@ -1,6 +1,5 @@
 import asyncpg
 import os
-import ssl
 from dotenv import load_dotenv
 from datetime import date
 
@@ -11,14 +10,8 @@ db_pool = None
 # === Databasega ulanish ===
 async def init_db():
     global db_pool
-
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE   # sertifikatni tekshirmaydi
-
     db_pool = await asyncpg.create_pool(
-        dsn=os.getenv("DATABASE_URL"),
-        ssl=ssl_context
+        dsn=os.getenv("DATABASE_URL")  # faqat URL orqali ulanish
     )
 
     async with db_pool.acquire() as conn:
@@ -57,14 +50,13 @@ async def init_db():
             );
         """)
 
-        # Dastlabki adminlar
-        default_admins = [6486825926]
+        # Dastlabki adminlar (o‘zingning ID’laringni yoz)
+        default_admins = [6486825926, 6549594161]
         for admin_id in default_admins:
             await conn.execute(
                 "INSERT INTO admins (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
                 admin_id
             )
-
 
 
 # === Foydalanuvchilar bilan ishlash ===
