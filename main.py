@@ -604,18 +604,16 @@ async def show_all_animes(message: types.Message):
 
 
 # === Statistika ===
-@dp.message_handler(text="📊 Statistika", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
     from database import db_pool
     async with db_pool.acquire() as conn:
         start = time.perf_counter()
         await conn.fetch("SELECT 1;")
         ping = (time.perf_counter() - start) * 1000
-
     kodlar = await get_all_codes()
     foydalanuvchilar = await get_user_count()
     today_users = await get_today_users()
-
     text = (
         f"💡 O'rtacha yuklanish: {ping:.2f} ms\n\n"
         f"👥 Foydalanuvchilar: {foydalanuvchilar} ta\n\n"
