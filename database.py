@@ -65,7 +65,12 @@ async def add_user(user_id):
         await conn.execute(
             "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT DO NOTHING", user_id
         )
-
+async def get_conn():
+    global db_pool
+    if db_pool is None:
+        await init_db()
+    return db_pool
+    
 async def get_user_count():
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow("SELECT COUNT(*) FROM users")
