@@ -667,33 +667,12 @@ async def show_all_animes(message: types.Message):
         await message.answer(text, parse_mode="Markdown")
 
 
-# 📊 Statistika
+# === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
-    # ⏱ Pingni o'lchash
-    from database import db_pool
-    async with db_pool.acquire() as conn:
-        start = time.perf_counter()
-        await conn.fetch("SELECT 1;")  # oddiy so'rov
-        ping = (time.perf_counter() - start) * 1000  # ms ga aylantiramiz
-
-    # 📂 Kodlar va foydalanuvchilar soni
     kodlar = await get_all_codes()
     foydalanuvchilar = await get_user_count()
-
-    # 📅 Bugun qo'shilgan foydalanuvchilar
-    today_users = await get_today_users()
-
-    # 📊 Xabar
-    text = (
-        f"💡 O'rtacha yuklanish: {ping:.2f} ms\n\n"
-        f"👥 Foydalanuvchilar: {foydalanuvchilar} ta\n\n"
-        f"📂 Barcha yuklangan animelar: {len(kodlar)} ta\n\n"
-        f"📅 Bugun qo'shilgan foydalanuvchilar: {today_users} ta"
-    )
-    await message.answer(text)
-
-
+    await message.answer(f"📦 Kodlar: {len(kodlar)}\n👥 Foydalanuvchilar: {foydalanuvchilar}")
 
 # === Orqaga tugmasi ===
 @dp.message_handler(lambda m: m.text == "⬅️ Orqaga", user_id=ADMINS)
