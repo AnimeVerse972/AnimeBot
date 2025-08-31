@@ -1,6 +1,5 @@
 import asyncpg
 import os
-import ssl
 from dotenv import load_dotenv
 from datetime import date
 
@@ -11,14 +10,10 @@ db_pool = None
 # === Databasega ulanish ===
 async def init_db():
     global db_pool
-
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-
     db_pool = await asyncpg.create_pool(
         dsn=os.getenv("DATABASE_URL"),  # faqat URL orqali ulanish
-        ssl=ssl_context
+        ssl="require",
+        statement_cache_size=0
     )
 
     async with db_pool.acquire() as conn:
@@ -57,7 +52,7 @@ async def init_db():
             );
         """)
 
-        # Dastlabki adminlar
+        # Dastlabki adminlar (o‘zingning ID’laringni yoz)
         default_admins = [6486825926]
         for admin_id in default_admins:
             await conn.execute(
@@ -72,13 +67,12 @@ async def add_user(user_id):
         await conn.execute(
             "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT DO NOTHING", user_id
         )
-
 async def get_conn():
     global db_pool
     if db_pool is None:
         await init_db()
     return db_pool
-
+    
 async def get_user_count():
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow("SELECT COUNT(*) FROM users")
